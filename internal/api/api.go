@@ -12,6 +12,12 @@ type AuthenticationResponse struct {
 	Token   string `json:"token"`
 }
 
+type RegisterSessionRequest struct {
+	SessionId  string   `json:"session_id"`
+	SessionKey string   `json:"session_key"`
+	Filters    []string `json:"filters"`
+}
+
 type SessionResponse struct {
 	SessionId      string `json:"session_id"`
 	SessionAuthUrl string `json:"session_auth_url"`
@@ -30,4 +36,5 @@ type UserToken struct {
 	Username       string    `json:"user_name"`
 	Email          string    `json:"email"`
 	ExpirationTime time.Time `json:"exp"`
+	Authorized     bool
 }

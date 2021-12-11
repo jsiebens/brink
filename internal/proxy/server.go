@@ -37,6 +37,7 @@ func StartServer(config *Config) error {
 		client:            resty.New(),
 		authServerBaseUrl: url.String(),
 		sessions:          cache.NewMemoryCache(),
+		filters:           config.Filters,
 	}
 
 	e.GET("/version", version.GetReleaseInfoHandler)
@@ -54,6 +55,7 @@ type Server struct {
 	client            *resty.Client
 	sessions          cache.Cache
 	authServerBaseUrl string
+	filters           []string
 }
 
 type session struct {
@@ -73,12 +75,12 @@ func (s *Server) CreateSession(c echo.Context) error {
 		return err
 	}
 
-	response := api.SessionResponse{
-		SessionId:      sessionId,
-		SessionAuthUrl: s.authServerBaseUrl + "/a/auth/" + hex.EncodeToString(publicKey[:]),
+	resp, err := s.registerSession(sessionId, hex.EncodeToString(publicKey[:]))
+	if err != nil {
+		return err
 	}
 
-	return c.JSON(http.StatusOK, &response)
+	return c.JSON(http.StatusOK, &resp)
 }
 
 func (s *Server) Proxy() echo.HandlerFunc {
@@ -120,6 +122,16 @@ func (s *Server) authorized(req *http.Request) (string, bool, error) {
 		return "", false, fmt.Errorf("token is expired")
 	}
 
+	if !u.Authorized {
+		logrus.
+			WithField("id", u.UserID).
+			WithField("name", u.Username).
+			WithField("email", u.Email).
+			Info("Client not authorized")
+
+		return "", false, fmt.Errorf("not authorized")
+	}
+
 	logrus.
 		WithField("id", u.UserID).
 		WithField("name", u.Username).
@@ -153,4 +165,32 @@ func (s *Server) getPublicKey() (*[32]byte, error) {
 	}
 
 	return util.ParseKey(result.Key)
+}
+
+func (s *Server) registerSession(id, key string) (*api.SessionResponse, error) {
+	request := api.RegisterSessionRequest{
+		SessionId:  id,
+		SessionKey: key,
+		Filters:    s.filters,
+	}
+
+	var result api.SessionResponse
+	var errMsg api.MessageResponse
+
+	resp, err := s.client.R().
+		SetBody(&request).
+		SetResult(&result).
+		SetError(&errMsg).
+		SetContext(context.Background()).
+		Post(s.authServerBaseUrl + "/a/session")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
+	}
+
+	return &result, nil
 }

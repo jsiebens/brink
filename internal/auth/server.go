@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/hashicorp/go-bexpr"
 	"github.com/jsiebens/proxiro/internal/api"
 	"github.com/jsiebens/proxiro/internal/auth/providers"
 	"github.com/jsiebens/proxiro/internal/auth/templates"
@@ -49,9 +50,11 @@ func StartServer(config *Config) error {
 
 	e.GET("/version", version.GetReleaseInfoHandler)
 	e.GET("/a/key", server.Key)
-	e.POST("/a/auth/:key", server.Auth)
+	e.POST("/a/session", server.RegisterSession)
+	e.POST("/a/auth", server.Auth)
 	e.GET("/a/callback", server.CallbackOAuth)
 	e.GET("/a/success", server.Success)
+	e.GET("/a/unauthorized", server.Unauthorized)
 	e.GET("/a/error", server.CallbackError)
 
 	if config.Tls.KeyFile == "" {
@@ -70,8 +73,10 @@ type Server struct {
 }
 
 type session struct {
-	Token string
-	Error string
+	Key     string
+	Filters []string
+	Token   string
+	Error   string
 }
 
 type oauthState struct {
@@ -84,17 +89,47 @@ func (s *Server) Key(c echo.Context) error {
 	return c.JSON(http.StatusOK, &resp)
 }
 
+func (s *Server) RegisterSession(c echo.Context) error {
+	req := api.RegisterSessionRequest{}
+
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+
+	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Filters: req.Filters}); err != nil {
+		return err
+	}
+
+	response := api.SessionResponse{
+		SessionId:      req.SessionId,
+		SessionAuthUrl: s.createUrl("/a/auth"),
+	}
+
+	return c.JSON(http.StatusOK, &response)
+}
+
 func (s *Server) Auth(c echo.Context) error {
-	key := c.Param("key")
 	req := api.AuthenticationRequest{}
 
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
 
+	se := session{}
+
+	ok, err := s.sessions.Get(req.SessionId, &se)
+
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid session id")
+	}
+
 	switch req.Command {
 	case "start":
-		state, err := s.createOAuthState(req.SessionId, key)
+		state, err := s.createOAuthState(req.SessionId, se.Key)
 		if err != nil {
 			return err
 		}
@@ -107,23 +142,17 @@ func (s *Server) Auth(c echo.Context) error {
 
 		return c.JSON(http.StatusOK, &response)
 	case "token":
-		var resp = session{}
-
-		ok, err := s.sessions.Get(req.SessionId, &resp)
-
-		if err != nil {
-			return err
-		}
-
-		if ok {
+		if se.Error != "" {
 			_ = s.sessions.Delete(req.SessionId)
+			return echo.NewHTTPError(http.StatusUnauthorized, se.Error)
 		}
 
-		if resp.Error != "" {
-			return echo.NewHTTPError(http.StatusUnauthorized, resp.Error)
-		} else {
-			return c.JSON(http.StatusOK, &api.AuthenticationResponse{Token: resp.Token})
+		if se.Token != "" {
+			_ = s.sessions.Delete(req.SessionId)
+			return c.JSON(http.StatusOK, &api.AuthenticationResponse{Token: se.Token})
 		}
+
+		return c.JSON(http.StatusOK, &api.AuthenticationResponse{})
 	}
 
 	return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
@@ -135,6 +164,16 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 		return nil
 	}
 
+	se := session{}
+	ok, err := s.sessions.Get(state.SessionId, &se)
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		return c.Redirect(http.StatusFound, "/a/error")
+	}
+
 	callbackError := c.QueryParam("error")
 
 	if callbackError != "" {
@@ -144,7 +183,7 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 		return c.Redirect(http.StatusFound, "/a/error")
 	}
 
-	publicKey, err := util.ParseKey(state.Key)
+	publicKey, err := util.ParseKey(se.Key)
 	if err != nil {
 		return err
 	}
@@ -154,11 +193,17 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 		return err
 	}
 
+	authorized, err := s.evaluateIdentity(se.Filters, identity)
+	if err != nil {
+		return err
+	}
+
 	u := &api.UserToken{
 		UserID:         identity.UserID,
 		Username:       identity.Username,
 		Email:          identity.Email,
 		ExpirationTime: time.Now().Add(5 * time.Minute).UTC(),
+		Authorized:     authorized,
 	}
 
 	token, err := util.SealBase58(u, publicKey, s.privateKey)
@@ -170,15 +215,47 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 		return err
 	}
 
-	return c.Redirect(http.StatusFound, "/a/success")
+	if authorized {
+		return c.Redirect(http.StatusFound, "/a/success")
+	} else {
+		return c.Redirect(http.StatusFound, "/a/unauthorized")
+	}
 }
 
 func (s *Server) Success(c echo.Context) error {
 	return c.Render(http.StatusOK, "success.html", nil)
 }
 
+func (s *Server) Unauthorized(c echo.Context) error {
+	return c.Render(http.StatusOK, "unauthorized.html", nil)
+}
+
 func (s *Server) CallbackError(c echo.Context) error {
 	return c.Render(http.StatusOK, "error.html", nil)
+}
+
+func (s *Server) evaluateIdentity(filters []string, identity *providers.Identity) (bool, error) {
+	for _, f := range filters {
+		if f == "*" {
+			return true, nil
+		}
+
+		evaluator, err := bexpr.CreateEvaluator(f)
+		if err != nil {
+			return false, err
+		}
+
+		result, err := evaluator.Evaluate(identity.Attr)
+		if err != nil {
+			return false, err
+		}
+
+		if result {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (s *Server) createOAuthState(sessionId, key string) (string, error) {
