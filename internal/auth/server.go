@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jsiebens/proxiro/internal/api"
 	"github.com/jsiebens/proxiro/internal/auth/providers"
+	"github.com/jsiebens/proxiro/internal/auth/templates"
 	"github.com/jsiebens/proxiro/internal/cache"
 	"github.com/jsiebens/proxiro/internal/util"
 	"github.com/jsiebens/proxiro/internal/version"
@@ -20,6 +21,7 @@ func StartServer(config *Config) error {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
+	e.Renderer = templates.NewTemplates()
 
 	publicKey, privateKey, err := box.GenerateKey(rand.Reader)
 	if err != nil {
@@ -172,11 +174,11 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 }
 
 func (s *Server) Success(c echo.Context) error {
-	return c.String(http.StatusOK, "OK")
+	return c.Render(http.StatusOK, "success.html", nil)
 }
 
 func (s *Server) CallbackError(c echo.Context) error {
-	return c.String(http.StatusBadRequest, "NOK")
+	return c.Render(http.StatusOK, "error.html", nil)
 }
 
 func (s *Server) createOAuthState(sessionId, key string) (string, error) {
