@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/hashicorp/go-bexpr"
 	"github.com/jsiebens/proxiro/internal/api"
@@ -12,6 +13,7 @@ import (
 	"github.com/jsiebens/proxiro/internal/util"
 	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/labstack/echo/v4"
+	"github.com/mitchellh/pointerstructure"
 	"golang.org/x/crypto/nacl/box"
 	"net/http"
 	"strings"
@@ -246,7 +248,7 @@ func (s *Server) evaluateIdentity(filters []string, identity *providers.Identity
 		}
 
 		result, err := evaluator.Evaluate(identity.Attr)
-		if err != nil {
+		if err != nil && !errors.Is(err, pointerstructure.ErrNotFound) {
 			return false, err
 		}
 
