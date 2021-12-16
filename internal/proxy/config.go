@@ -40,13 +40,18 @@ func defaultConfig() *Config {
 }
 
 type Config struct {
-	ListenAddr string   `mapstructure:"listen_addr"`
-	AuthServer string   `mapstructure:"auth_server"`
-	Filters    []string `mapstructure:"filters"`
-	Tls        Tls      `mapstructure:"tls"`
+	ListenAddr string    `mapstructure:"listen_addr"`
+	AuthServer string    `mapstructure:"auth_server"`
+	Tls        Tls       `mapstructure:"tls"`
+	ACLPolicy  ACLPolicy `mapstructure:"acl_policy"`
 }
 
 type Tls struct {
 	CertFile string `mapstructure:"cert_file"`
 	KeyFile  string `mapstructure:"key_file"`
+}
+
+type ACLPolicy struct {
+	Identity []string `mapstructure:"identities"`
+	Targets  []string `mapstructure:"targets"`
 }

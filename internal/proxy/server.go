@@ -15,6 +15,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/nacl/box"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -29,6 +31,11 @@ func StartServer(config *Config) error {
 		return err
 	}
 
+	targetFilters, err := parseTargetFilters(config.ACLPolicy.Targets)
+	if err != nil {
+		return err
+	}
+
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -37,7 +44,10 @@ func StartServer(config *Config) error {
 		client:            resty.New(),
 		authServerBaseUrl: url.String(),
 		sessions:          cache.NewMemoryCache(),
-		filters:           config.Filters,
+		aclPolicy: aclPolicy{
+			identityFilters: config.ACLPolicy.Identity,
+			targetFilters:   targetFilters,
+		},
 	}
 
 	e.GET("/version", version.GetReleaseInfoHandler)
@@ -55,7 +65,7 @@ type Server struct {
 	client            *resty.Client
 	sessions          cache.Cache
 	authServerBaseUrl string
-	filters           []string
+	aclPolicy         aclPolicy
 }
 
 type session struct {
@@ -85,7 +95,7 @@ func (s *Server) CreateSession(c echo.Context) error {
 
 func (s *Server) Proxy() echo.HandlerFunc {
 	rd := remotedialer.New(s.authorized, remotedialer.DefaultErrorWriter)
-	rd.ClientConnectAuthorizer = s.allowAll
+	rd.ClientConnectAuthorizer = s.authConnection
 	return echo.WrapHandler(rd)
 }
 
@@ -141,9 +151,25 @@ func (s *Server) authorized(req *http.Request) (string, bool, error) {
 	return req.Header.Get(IdHeader), true, nil
 }
 
-func (s *Server) allowAll(network, address string) bool {
-	logrus.WithField("network", network).WithField("addr", address).Info("Connection allowed")
-	return true
+func (s *Server) authConnection(network, address string) bool {
+	n := strings.SplitN(address, ":", 2)
+
+	host := n[0]
+	port, err := strconv.ParseUint(n[1], 10, 64)
+
+	if err != nil {
+		return false
+	}
+
+	for _, t := range s.aclPolicy.targetFilters {
+		if t.validate(host, port) {
+			logrus.WithField("network", network).WithField("addr", address).Info("Connection allowed")
+			return true
+		}
+	}
+
+	logrus.WithField("network", network).WithField("addr", address).Info("Connection declined")
+	return false
 }
 
 func (s *Server) getPublicKey() (*[32]byte, error) {
@@ -171,7 +197,7 @@ func (s *Server) registerSession(id, key string) (*api.SessionResponse, error) {
 	request := api.RegisterSessionRequest{
 		SessionId:  id,
 		SessionKey: key,
-		Filters:    s.filters,
+		Filters:    s.aclPolicy.identityFilters,
 	}
 
 	var result api.SessionResponse
