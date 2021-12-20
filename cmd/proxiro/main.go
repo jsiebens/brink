@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/jsiebens/proxiro/internal/auth"
 	"github.com/jsiebens/proxiro/internal/client"
@@ -82,10 +83,12 @@ func connectCommand() *cobra.Command {
 	}
 
 	var listenPort uint64
+	var listenOnStdin bool
 	var tlsSkipVerify bool
 	var caFile string
 
 	command.Flags().Uint64Var(&listenPort, "listen-port", 0, "")
+	command.Flags().BoolVar(&listenOnStdin, "listen-on-stdin", false, "")
 	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
 	command.Flags().StringVar(&caFile, "ca-file", "", "")
 
@@ -95,7 +98,16 @@ func connectCommand() *cobra.Command {
 			return err
 		}
 
-		return client.StartClient(cmd.Context(), args[0], listenPort, args[1], caFile, tlsSkipVerify)
+		var onConnect func(context.Context, string) error
+
+		if listenOnStdin {
+			onConnect = func(ctx context.Context, addr string) error {
+				go client.StartNC(addr)
+				return nil
+			}
+		}
+
+		return client.StartClient(cmd.Context(), args[0], listenPort, args[1], caFile, tlsSkipVerify, onConnect)
 	}
 
 	return command

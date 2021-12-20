@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-func StartClient(ctx context.Context, proxy string, listenPort uint64, target string, caFile string, insecureSkipVerify bool) error {
+func StartClient(ctx context.Context, proxy string, listenPort uint64, target string, caFile string, insecureSkipVerify bool, onConnect OnConnect) error {
 	targetBaseUrl, err := util.NormalizeProxyUrl(proxy)
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 		TLSClientConfig:  tlsConfig,
 	}
 
-	forwarder, err := NewForwarder(listenPort, target)
+	forwarder, err := NewForwarder(listenPort, target, onConnect)
 	if err != nil {
 		return err
 	}
