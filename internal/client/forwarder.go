@@ -46,19 +46,16 @@ func NewForwarder(listeners []string) (*Forwarder, error) {
 
 func (f *Forwarder) Start() error {
 	for _, target := range f.targets {
-		go f.startTarget(target)
+		listen, err := net.Listen("tcp", target.LocalAddr)
+		if err != nil {
+			return err
+		}
+		go f.startTarget(listen, target)
 	}
-
 	return nil
 }
 
-func (f *Forwarder) startTarget(target Target) {
-	listen, err := net.Listen("tcp", target.LocalAddr)
-	if err != nil {
-		// TODO log
-		return
-	}
-
+func (f *Forwarder) startTarget(listen net.Listener, target Target) {
 	logrus.WithField("addr", target.LocalAddr).WithField("target", target.RemoteAddr).Info("Listener started")
 	for {
 		conn, err := listen.Accept()
