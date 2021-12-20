@@ -7,14 +7,13 @@ import (
 	"github.com/sirupsen/logrus"
 	"io"
 	"net"
-	"strings"
 	"sync"
 )
 
 type Forwarder struct {
 	sync.Mutex
 
-	targets []Target
+	target  Target
 	session *remotedialer.Session
 }
 
@@ -23,43 +22,32 @@ type Target struct {
 	RemoteAddr string
 }
 
-func NewForwarder(listeners []string) (*Forwarder, error) {
+func NewForwarder(port uint64, target string) (*Forwarder, error) {
 	f := &Forwarder{}
 
-	if len(listeners) == 0 {
-		return f, nil
-	}
-
-	for _, listen := range listeners {
-		parts := strings.SplitN(listen, ":", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid target format %s", listen)
-		}
-		f.targets = append(f.targets, Target{
-			LocalAddr:  "127.0.0.1:" + parts[0],
-			RemoteAddr: parts[1],
-		})
+	f.target = Target{
+		LocalAddr:  fmt.Sprintf("127.0.0.1:%d", port),
+		RemoteAddr: target,
 	}
 
 	return f, nil
 }
 
 func (f *Forwarder) Start() error {
-	for _, target := range f.targets {
-		listen, err := net.Listen("tcp", target.LocalAddr)
-		if err != nil {
-			return err
-		}
-		go f.startTarget(listen, target)
+	listen, err := net.Listen("tcp", f.target.LocalAddr)
+	if err != nil {
+		return err
 	}
+	go f.startTarget(listen)
+
 	return nil
 }
 
-func (f *Forwarder) startTarget(listen net.Listener, target Target) {
-	logrus.WithField("addr", target.LocalAddr).WithField("target", target.RemoteAddr).Info("Listener started")
+func (f *Forwarder) startTarget(listen net.Listener) {
+	logrus.WithField("addr", listen.Addr()).WithField("target", f.target.RemoteAddr).Info("Listener started")
 	for {
 		conn, err := listen.Accept()
-		logrus.WithField("addr", target.LocalAddr).Trace("New connection")
+		logrus.WithField("addr", f.target.LocalAddr).Trace("New connection")
 		if err != nil {
 			continue
 		}
@@ -75,7 +63,7 @@ func (f *Forwarder) startTarget(listen net.Listener, target Target) {
 			go pipe(closer, source, target)
 			<-closer
 			logrus.WithField("addr", target.LocalAddr).Trace("Connection completed")
-		}(conn, target.RemoteAddr)
+		}(conn, f.target.RemoteAddr)
 	}
 }
 
@@ -90,7 +78,6 @@ func (f *Forwarder) OnTunnelConnect(ctx context.Context, session *remotedialer.S
 		defer f.Unlock()
 		f.session = nil
 	}()
-
 	return nil
 }
 

@@ -17,13 +17,13 @@ import (
 	"time"
 )
 
-func StartClient(ctx context.Context, target string, listeners []string, caFile string, insecureSkipVerify bool) error {
-	targetBaseUrl, err := util.NormalizeTargetUrl(target)
+func StartClient(ctx context.Context, proxy string, listenPort uint64, target string, caFile string, insecureSkipVerify bool) error {
+	targetBaseUrl, err := util.NormalizeProxyUrl(proxy)
 	if err != nil {
 		return err
 	}
 
-	connectUrl, err := util.NormalizeConnectUrl(target)
+	connectUrl, err := util.NormalizeConnectUrl(proxy)
 	if err != nil {
 		return err
 	}
@@ -53,10 +53,15 @@ func StartClient(ctx context.Context, target string, listeners []string, caFile 
 		TLSClientConfig:  tlsConfig,
 	}
 
+	forwarder, err := NewForwarder(listenPort, target)
+	if err != nil {
+		return err
+	}
+
 	c := &Client{
 		httpClient:    resty.NewWithClient(client),
 		dialer:        dialer,
-		listeners:     listeners,
+		forwarder:     forwarder,
 		targetBaseUrl: targetBaseUrl.String(),
 		connectUrl:    connectUrl.String(),
 	}
@@ -67,12 +72,16 @@ func StartClient(ctx context.Context, target string, listeners []string, caFile 
 type Client struct {
 	httpClient    *resty.Client
 	dialer        *websocket.Dialer
-	listeners     []string
+	forwarder     *Forwarder
 	targetBaseUrl string
 	connectUrl    string
 }
 
 func (c *Client) Start(ctx context.Context) error {
+	if err := c.forwarder.Start(); err != nil {
+		return err
+	}
+
 	sn, err := c.createSession(ctx)
 	if err != nil {
 		return err
@@ -95,7 +104,7 @@ func (c *Client) Start(ctx context.Context) error {
 		return err
 	}
 
-	if err := c.connect(ctx, sn.SessionId, token); err != nil {
+	if err := c.connect(ctx, sn.SessionId, token, c.forwarder.OnTunnelConnect); err != nil {
 		return err
 	}
 
@@ -165,20 +174,12 @@ func (c *Client) pollSessionToken(ctx context.Context, url, sessionId string) (s
 	}
 }
 
-func (c *Client) connect(ctx context.Context, id, token string) error {
+func (c *Client) connect(ctx context.Context, id, token string, onConnect func(context.Context, *remotedialer.Session) error) error {
 	headers := http.Header{}
 	headers.Add(proxy.IdHeader, id)
 	headers.Add(proxy.AuthHeader, token)
 
-	forwarder, err := NewForwarder(c.listeners)
-	if err != nil {
-		return err
-	}
-	if err := forwarder.Start(); err != nil {
-		return err
-	}
-
-	return remotedialer.ClientConnect(ctx, c.connectUrl+"/p/connect", headers, c.dialer, c.declineAll, forwarder.OnTunnelConnect)
+	return remotedialer.ClientConnect(ctx, c.connectUrl+"/p/connect", headers, c.dialer, c.declineAll, onConnect)
 }
 
 func (c *Client) declineAll(network, address string) bool {

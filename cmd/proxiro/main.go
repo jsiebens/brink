@@ -7,6 +7,7 @@ import (
 	"github.com/jsiebens/proxiro/internal/proxy"
 	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/spf13/cobra"
+	"net"
 	"os"
 )
 
@@ -74,22 +75,27 @@ func proxyCommand() *cobra.Command {
 
 func connectCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:          "connect",
+		Use:          "connect [proxy] [target]",
 		SilenceUsage: true,
-		Args:         cobra.MinimumNArgs(1),
-		ArgAliases:   []string{"target"},
+		Args:         cobra.ExactArgs(2),
+		ArgAliases:   []string{"proxy", "target"},
 	}
 
-	var listeners []string
+	var listenPort uint64
 	var tlsSkipVerify bool
 	var caFile string
 
-	command.Flags().StringSliceVarP(&listeners, "listen-addr", "l", []string{}, "")
+	command.Flags().Uint64Var(&listenPort, "listen-port", 0, "")
 	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
 	command.Flags().StringVar(&caFile, "ca-file", "", "")
 
 	command.RunE = func(cmd *cobra.Command, args []string) error {
-		return client.StartClient(cmd.Context(), args[0], listeners, caFile, tlsSkipVerify)
+		_, _, err := net.SplitHostPort(args[1])
+		if err != nil {
+			return err
+		}
+
+		return client.StartClient(cmd.Context(), args[0], listenPort, args[1], caFile, tlsSkipVerify)
 	}
 
 	return command

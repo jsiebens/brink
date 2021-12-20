@@ -26,7 +26,7 @@ const (
 )
 
 func StartServer(config *Config) error {
-	url, err := util.NormalizeTargetUrl(config.AuthServer)
+	url, err := util.NormalizeProxyUrl(config.AuthServer)
 	if err != nil {
 		return err
 	}
