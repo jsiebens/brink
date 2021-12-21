@@ -1,6 +1,7 @@
 package util
 
 import (
+	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -169,4 +170,13 @@ func OpenBase58(msg string, v interface{}, publicKey, privateKey *[32]byte) erro
 		return err
 	}
 	return Open(encrypted, v, publicKey, privateKey)
+}
+
+func CheckSum(v interface{}) (string, error) {
+	marshal, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	sum := md5.Sum(marshal)
+	return hex.EncodeToString(sum[:]), nil
 }

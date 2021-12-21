@@ -92,19 +92,29 @@ func (c *Client) Start(ctx context.Context) error {
 		return err
 	}
 
-	err = util.OpenURL(authenticate.AuthUrl)
-	if err != nil {
-		fmt.Println()
-		fmt.Println(authenticate.AuthUrl)
-		fmt.Println()
+	var sessionToken string
+	var authToken string
+
+	if authenticate.AuthUrl != "" {
+		err = util.OpenURL(authenticate.AuthUrl)
+		if err != nil {
+			fmt.Println()
+			fmt.Println(authenticate.AuthUrl)
+			fmt.Println()
+		}
+
+		authToken, sessionToken, err = c.pollSessionToken(ctx, sn.SessionAuthUrl, sn.SessionId)
+		if err != nil {
+			return err
+		}
+	} else {
+		authToken = authenticate.AuthToken
+		sessionToken = authenticate.SessionToken
 	}
 
-	token, err := c.pollSessionToken(ctx, sn.SessionAuthUrl, sn.SessionId)
-	if err != nil {
-		return err
-	}
+	_ = c.storeAuthToken(c.targetBaseUrl, authToken)
 
-	if err := c.connect(ctx, sn.SessionId, token, c.forwarder.OnTunnelConnect); err != nil {
+	if err := c.connect(ctx, sn.SessionId, sessionToken, c.forwarder.OnTunnelConnect); err != nil {
 		return err
 	}
 
@@ -136,7 +146,13 @@ func (c *Client) authenticate(ctx context.Context, command, url, sessionId strin
 	var result api.AuthenticationResponse
 	var errMsg api.MessageResponse
 
+	token, err := c.loadAuthToken(c.targetBaseUrl)
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := c.httpClient.R().
+		SetHeader(proxy.AuthHeader, token).
 		SetBody(&api.AuthenticationRequest{Command: command, SessionId: sessionId}).
 		SetResult(&result).
 		SetError(&errMsg).
@@ -154,22 +170,22 @@ func (c *Client) authenticate(ctx context.Context, command, url, sessionId strin
 	return &result, nil
 }
 
-func (c *Client) pollSessionToken(ctx context.Context, url, sessionId string) (string, error) {
+func (c *Client) pollSessionToken(ctx context.Context, url, sessionId string) (string, string, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", "", ctx.Err()
 		case <-time.After(1500 * time.Millisecond):
 			resp, err := c.authenticate(ctx, "token", url, sessionId)
 			if err != nil {
-				return "", err
+				return "", "", err
 			}
 
-			if resp.Token == "" {
+			if resp.SessionToken == "" {
 				continue
 			}
 
-			return resp.Token, nil
+			return resp.AuthToken, resp.SessionToken, nil
 		}
 	}
 }

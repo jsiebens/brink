@@ -8,8 +8,9 @@ type AuthenticationRequest struct {
 }
 
 type AuthenticationResponse struct {
-	AuthUrl string `json:"auth_url"`
-	Token   string `json:"token"`
+	AuthUrl      string `json:"auth_url"`
+	AuthToken    string `json:"auth_token"`
+	SessionToken string `json:"session_token"`
 }
 
 type RegisterSessionRequest struct {
@@ -36,5 +37,6 @@ type UserToken struct {
 	Username       string    `json:"user_name"`
 	Email          string    `json:"email"`
 	ExpirationTime time.Time `json:"exp"`
-	Authorized     bool
+	Authorized     bool      `json:"authorized"`
+	Checksum       string    `json:"cs"`
 }

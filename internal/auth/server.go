@@ -10,6 +10,7 @@ import (
 	"github.com/jsiebens/proxiro/internal/auth/providers"
 	"github.com/jsiebens/proxiro/internal/auth/templates"
 	"github.com/jsiebens/proxiro/internal/cache"
+	"github.com/jsiebens/proxiro/internal/proxy"
 	"github.com/jsiebens/proxiro/internal/util"
 	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/labstack/echo/v4"
@@ -75,10 +76,12 @@ type Server struct {
 }
 
 type session struct {
-	Key     string
-	Filters []string
-	Token   string
-	Error   string
+	Key          string
+	Filters      []string
+	AuthToken    string
+	SessionToken string
+	CheckSum     string
+	Error        string
 }
 
 type oauthState struct {
@@ -98,7 +101,12 @@ func (s *Server) RegisterSession(c echo.Context) error {
 		return err
 	}
 
-	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Filters: req.Filters}); err != nil {
+	sum, err := util.CheckSum(req.Filters)
+	if err != nil {
+		return err
+	}
+
+	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Filters: req.Filters, CheckSum: sum}); err != nil {
 		return err
 	}
 
@@ -131,6 +139,35 @@ func (s *Server) Auth(c echo.Context) error {
 
 	switch req.Command {
 	case "start":
+
+		authToken := c.Request().Header.Get(proxy.AuthHeader)
+
+		if authToken != "" {
+			var u = &api.UserToken{}
+			err := util.OpenBase58(authToken, u, s.publicKey, s.privateKey)
+
+			now := time.Now().UTC()
+
+			if err == nil && u.Authorized && now.Before(u.ExpirationTime) && u.Checksum == se.CheckSum {
+				publicKey, err := util.ParseKey(se.Key)
+				if err != nil {
+					return err
+				}
+
+				u.ExpirationTime = now.Add(5 * time.Minute).UTC()
+				sessionToken, err := util.SealBase58(u, publicKey, s.privateKey)
+				if err != nil {
+					return err
+				}
+
+				_ = s.sessions.Delete(req.SessionId)
+				return c.JSON(http.StatusOK, &api.AuthenticationResponse{
+					AuthToken:    authToken,
+					SessionToken: sessionToken,
+				})
+			}
+		}
+
 		state, err := s.createOAuthState(req.SessionId, se.Key)
 		if err != nil {
 			return err
@@ -149,9 +186,12 @@ func (s *Server) Auth(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusUnauthorized, se.Error)
 		}
 
-		if se.Token != "" {
+		if se.SessionToken != "" {
 			_ = s.sessions.Delete(req.SessionId)
-			return c.JSON(http.StatusOK, &api.AuthenticationResponse{Token: se.Token})
+			return c.JSON(http.StatusOK, &api.AuthenticationResponse{
+				AuthToken:    se.AuthToken,
+				SessionToken: se.SessionToken,
+			})
 		}
 
 		return c.JSON(http.StatusOK, &api.AuthenticationResponse{})
@@ -201,6 +241,7 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 	}
 
 	u := &api.UserToken{
+		Checksum:       se.CheckSum,
 		UserID:         identity.UserID,
 		Username:       identity.Username,
 		Email:          identity.Email,
@@ -208,12 +249,18 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 		Authorized:     authorized,
 	}
 
-	token, err := util.SealBase58(u, publicKey, s.privateKey)
+	sessionToken, err := util.SealBase58(u, publicKey, s.privateKey)
 	if err != nil {
 		return err
 	}
 
-	if err := s.sessions.Set(state.SessionId, session{Token: token}); err != nil {
+	u.ExpirationTime = time.Now().Add(24 * time.Hour).UTC()
+	authToken, err := util.SealBase58(u, s.publicKey, s.privateKey)
+	if err != nil {
+		return err
+	}
+
+	if err := s.sessions.Set(state.SessionId, session{SessionToken: sessionToken, AuthToken: authToken}); err != nil {
 		return err
 	}
 
