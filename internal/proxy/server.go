@@ -142,16 +142,6 @@ func (s *Server) authorized(req *http.Request) (string, bool, error) {
 		return "", false, fmt.Errorf("token is expired")
 	}
 
-	if !u.Authorized {
-		logrus.
-			WithField("id", u.UserID).
-			WithField("name", u.Username).
-			WithField("email", u.Email).
-			Info("Client not authorized")
-
-		return "", false, fmt.Errorf("not authorized")
-	}
-
 	logrus.
 		WithField("id", u.UserID).
 		WithField("name", u.Username).

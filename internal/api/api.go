@@ -41,6 +41,5 @@ type UserToken struct {
 	Username       string    `json:"user_name"`
 	Email          string    `json:"email"`
 	ExpirationTime time.Time `json:"exp"`
-	Authorized     bool      `json:"authorized"`
 	Checksum       string    `json:"cs"`
 }

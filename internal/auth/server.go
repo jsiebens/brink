@@ -148,7 +148,7 @@ func (s *Server) Auth(c echo.Context) error {
 
 			now := time.Now().UTC()
 
-			if err == nil && u.Authorized && now.Before(u.ExpirationTime) && u.Checksum == se.CheckSum {
+			if err == nil && now.Before(u.ExpirationTime) && u.Checksum == se.CheckSum {
 				publicKey, err := util.ParseKey(se.Key)
 				if err != nil {
 					return err
@@ -240,33 +240,35 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 		return err
 	}
 
-	u := &api.UserToken{
-		Checksum:       se.CheckSum,
-		UserID:         identity.UserID,
-		Username:       identity.Username,
-		Email:          identity.Email,
-		ExpirationTime: time.Now().Add(5 * time.Minute).UTC(),
-		Authorized:     authorized,
-	}
-
-	sessionToken, err := util.SealBase58(u, publicKey, s.privateKey)
-	if err != nil {
-		return err
-	}
-
-	u.ExpirationTime = time.Now().Add(24 * time.Hour).UTC()
-	authToken, err := util.SealBase58(u, s.publicKey, s.privateKey)
-	if err != nil {
-		return err
-	}
-
-	if err := s.sessions.Set(state.SessionId, session{SessionToken: sessionToken, AuthToken: authToken}); err != nil {
-		return err
-	}
-
 	if authorized {
+		u := &api.UserToken{
+			Checksum:       se.CheckSum,
+			UserID:         identity.UserID,
+			Username:       identity.Username,
+			Email:          identity.Email,
+			ExpirationTime: time.Now().Add(5 * time.Minute).UTC(),
+		}
+
+		sessionToken, err := util.SealBase58(u, publicKey, s.privateKey)
+		if err != nil {
+			return err
+		}
+
+		u.ExpirationTime = time.Now().Add(24 * time.Hour).UTC()
+		authToken, err := util.SealBase58(u, s.publicKey, s.privateKey)
+		if err != nil {
+			return err
+		}
+
+		if err := s.sessions.Set(state.SessionId, session{SessionToken: sessionToken, AuthToken: authToken}); err != nil {
+			return err
+		}
+
 		return c.Redirect(http.StatusFound, "/a/success")
 	} else {
+		if err := s.sessions.Set(state.SessionId, session{Error: "unauthorized"}); err != nil {
+			return err
+		}
 		return c.Redirect(http.StatusFound, "/a/unauthorized")
 	}
 }
