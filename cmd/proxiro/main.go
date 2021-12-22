@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"github.com/jsiebens/proxiro/internal/auth"
 	"github.com/jsiebens/proxiro/internal/client"
@@ -98,16 +97,11 @@ func connectCommand() *cobra.Command {
 			return err
 		}
 
-		var onConnect func(context.Context, string) error
-
-		if listenOnStdin {
-			onConnect = func(ctx context.Context, addr string) error {
-				go client.StartNC(addr)
-				return nil
-			}
+		if !listenOnStdin {
+			return client.StartClient(cmd.Context(), args[0], listenPort, args[1], caFile, tlsSkipVerify, nil)
+		} else {
+			return client.StartClient(cmd.Context(), args[0], listenPort, args[1], caFile, tlsSkipVerify, client.StartNC)
 		}
-
-		return client.StartClient(cmd.Context(), args[0], listenPort, args[1], caFile, tlsSkipVerify, onConnect)
 	}
 
 	return command

@@ -1,11 +1,12 @@
 package client
 
 import (
+	"context"
 	"net"
 	"os"
 )
 
-func StartNC(addr string) error {
+func StartNC(ctx context.Context, addr string) error {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return err

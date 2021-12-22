@@ -70,8 +70,8 @@ func (f *Forwarder) startTarget(listen net.Listener) {
 
 func (f *Forwarder) OnTunnelConnect(ctx context.Context, session *remotedialer.Session) error {
 	f.Lock()
-	defer f.Unlock()
 	f.session = session
+	f.Unlock()
 
 	go func() {
 		<-ctx.Done()
