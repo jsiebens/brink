@@ -9,6 +9,7 @@ import (
 	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	exec "golang.org/x/sys/execabs"
 	"io/ioutil"
 	"net"
 	"os"
@@ -19,6 +20,7 @@ func main() {
 	cmd.AddCommand(serverCommand())
 	cmd.AddCommand(proxyCommand())
 	cmd.AddCommand(connectCommand())
+	cmd.AddCommand(sshCommand())
 	cmd.AddCommand(versionCommand())
 
 	if err := cmd.Execute(); err != nil {
@@ -115,6 +117,75 @@ func connectCommand() *cobra.Command {
 		} else {
 			return client.StartClient(cmd.Context(), proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, client.StartNC)
 		}
+	}
+
+	return command
+}
+
+func sshCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:          "ssh",
+		SilenceUsage: true,
+	}
+
+	var proxyAddr string
+	var targetAddr string
+	var userName string
+	var tlsSkipVerify bool
+	var caFile string
+
+	command.Flags().StringVarP(&proxyAddr, "proxy-addr", "r", "", "")
+	command.Flags().StringVarP(&targetAddr, "target-addr", "t", "", "")
+	command.Flags().StringVarP(&userName, "username", "u", "", "")
+	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
+	command.Flags().StringVar(&caFile, "ca-file", "", "")
+
+	_ = command.MarkFlagRequired("proxy-addr")
+	_ = command.MarkFlagRequired("target-addr")
+
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		cancelCtx, cancelFunc := context.WithCancel(cmd.Context())
+		defer cancelFunc()
+
+		_, _, err := net.SplitHostPort(targetAddr)
+		if err != nil {
+			return err
+		}
+
+		result := make(chan error, 2)
+
+		onConnect := func(ctx context.Context, addr string) error {
+			defer cancelFunc()
+
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				result <- err
+				return err
+			}
+
+			var sargs []string
+			sargs = append(sargs, "-p", port, host)
+			sargs = append(sargs, "-o", fmt.Sprintf("HostKeyAlias=%s", targetAddr))
+			if userName != "" {
+				sargs = append(sargs, "-l", userName)
+			}
+
+			ecmd := exec.Command("ssh", sargs...)
+			ecmd.Stdin = os.Stdin
+			ecmd.Stdout = os.Stdout
+			ecmd.Stderr = os.Stderr
+			err = ecmd.Run()
+			result <- err
+			return err
+		}
+
+		logrus.SetOutput(ioutil.Discard)
+
+		if err := client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, onConnect); err != nil {
+			return err
+		}
+
+		return <-result
 	}
 
 	return command
