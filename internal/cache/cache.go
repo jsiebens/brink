@@ -27,7 +27,7 @@ func (m *MemoryCache) Set(id string, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	m.cache.Set(id, msg, -1)
+	m.cache.Set(id, msg, cache.DefaultExpiration)
 	return nil
 }
 
