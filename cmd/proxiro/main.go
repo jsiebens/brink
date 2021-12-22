@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/jsiebens/proxiro/internal/auth"
 	"github.com/jsiebens/proxiro/internal/client"
 	"github.com/jsiebens/proxiro/internal/proxy"
 	"github.com/jsiebens/proxiro/internal/version"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"io/ioutil"
 	"net"
 	"os"
 )
@@ -77,30 +80,40 @@ func connectCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "connect [proxy] [target]",
 		SilenceUsage: true,
-		Args:         cobra.ExactArgs(2),
-		ArgAliases:   []string{"proxy", "target"},
 	}
 
+	var proxyAddr string
+	var targetAddr string
 	var listenPort uint64
 	var listenOnStdin bool
 	var tlsSkipVerify bool
 	var caFile string
 
+	command.Flags().StringVarP(&proxyAddr, "proxy-addr", "r", "", "")
+	command.Flags().StringVarP(&targetAddr, "target-addr", "t", "", "")
 	command.Flags().Uint64Var(&listenPort, "listen-port", 0, "")
 	command.Flags().BoolVar(&listenOnStdin, "listen-on-stdin", false, "")
 	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
 	command.Flags().StringVar(&caFile, "ca-file", "", "")
 
+	_ = command.MarkFlagRequired("proxy-addr")
+	_ = command.MarkFlagRequired("target-addr")
+
 	command.RunE = func(cmd *cobra.Command, args []string) error {
-		_, _, err := net.SplitHostPort(args[1])
+		logrus.SetOutput(ioutil.Discard)
+
+		_, _, err := net.SplitHostPort(targetAddr)
 		if err != nil {
 			return err
 		}
 
 		if !listenOnStdin {
-			return client.StartClient(cmd.Context(), args[0], listenPort, args[1], caFile, tlsSkipVerify, nil)
+			return client.StartClient(cmd.Context(), proxyAddr, listenPort, targetAddr, caFile, tlsSkipVerify, func(ctx context.Context, addr string) error {
+				fmt.Printf("\n  Listening on %s\n\n", addr)
+				return nil
+			})
 		} else {
-			return client.StartClient(cmd.Context(), args[0], listenPort, args[1], caFile, tlsSkipVerify, client.StartNC)
+			return client.StartClient(cmd.Context(), proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, client.StartNC)
 		}
 	}
 
@@ -119,6 +132,7 @@ func versionCommand() *cobra.Command {
 		fmt.Printf(`
  Version:       %s 
  Git Revision:  %s
+
 `, clientVersion, clientRevision)
 	}
 
