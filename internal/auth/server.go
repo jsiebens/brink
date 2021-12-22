@@ -80,7 +80,7 @@ type session struct {
 	Filters      []string
 	AuthToken    string
 	SessionToken string
-	CheckSum     string
+	Checksum     string
 	Error        string
 }
 
@@ -101,12 +101,7 @@ func (s *Server) RegisterSession(c echo.Context) error {
 		return err
 	}
 
-	sum, err := util.CheckSum(req.Filters)
-	if err != nil {
-		return err
-	}
-
-	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Filters: req.Filters, CheckSum: sum}); err != nil {
+	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Filters: req.Filters, Checksum: req.Checksum}); err != nil {
 		return err
 	}
 
@@ -148,7 +143,7 @@ func (s *Server) Auth(c echo.Context) error {
 
 			now := time.Now().UTC()
 
-			if err == nil && now.Before(u.ExpirationTime) && u.Checksum == se.CheckSum {
+			if err == nil && now.Before(u.ExpirationTime) && u.Checksum == se.Checksum {
 				publicKey, err := util.ParseKey(se.Key)
 				if err != nil {
 					return err
@@ -242,7 +237,7 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 
 	if authorized {
 		u := &api.UserToken{
-			Checksum:       se.CheckSum,
+			Checksum:       se.Checksum,
 			UserID:         identity.UserID,
 			Username:       identity.Username,
 			Email:          identity.Email,

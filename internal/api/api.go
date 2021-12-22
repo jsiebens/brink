@@ -21,6 +21,7 @@ type RegisterSessionRequest struct {
 	SessionId  string   `json:"session_id"`
 	SessionKey string   `json:"session_key"`
 	Filters    []string `json:"filters"`
+	Checksum   string   `json:"cs"`
 }
 
 type SessionResponse struct {

@@ -36,6 +36,11 @@ func StartServer(config *Config) error {
 		return err
 	}
 
+	checksum, err := util.Checksum(&config.ACLPolicy)
+	if err != nil {
+		return err
+	}
+
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -48,6 +53,7 @@ func StartServer(config *Config) error {
 			identityFilters: config.ACLPolicy.Identity,
 			targetFilters:   targetFilters,
 		},
+		checksum: checksum,
 	}
 
 	e.GET("/version", version.GetReleaseInfoHandler)
@@ -66,6 +72,7 @@ type Server struct {
 	sessions          cache.Cache
 	authServerBaseUrl string
 	aclPolicy         aclPolicy
+	checksum          string
 }
 
 type session struct {
@@ -138,7 +145,7 @@ func (s *Server) authorized(req *http.Request) (string, bool, error) {
 
 	now := time.Now().UTC()
 
-	if now.After(u.ExpirationTime) {
+	if now.After(u.ExpirationTime) || u.Checksum != s.checksum {
 		return "", false, fmt.Errorf("token is expired")
 	}
 
@@ -189,6 +196,7 @@ func (s *Server) registerSession(id, key string) (*api.SessionResponse, error) {
 		SessionId:  id,
 		SessionKey: key,
 		Filters:    s.aclPolicy.identityFilters,
+		Checksum:   s.checksum,
 	}
 
 	var result api.SessionResponse

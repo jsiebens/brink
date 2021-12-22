@@ -172,7 +172,7 @@ func OpenBase58(msg string, v interface{}, publicKey, privateKey *[32]byte) erro
 	return Open(encrypted, v, publicKey, privateKey)
 }
 
-func CheckSum(v interface{}) (string, error) {
+func Checksum(v interface{}) (string, error) {
 	marshal, err := json.Marshal(v)
 	if err != nil {
 		return "", err
