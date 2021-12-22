@@ -13,6 +13,10 @@ type AuthenticationResponse struct {
 	SessionToken string `json:"session_token"`
 }
 
+type CreateSessionRequest struct {
+	Target string `json:"target"`
+}
+
 type RegisterSessionRequest struct {
 	SessionId  string   `json:"session_id"`
 	SessionKey string   `json:"session_key"`

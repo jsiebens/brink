@@ -126,6 +126,7 @@ func (c *Client) createSession(ctx context.Context) (*api.SessionResponse, error
 	var errMsg api.MessageResponse
 
 	resp, err := c.httpClient.R().
+		SetBody(&api.CreateSessionRequest{Target: c.forwarder.remoteAddr}).
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).

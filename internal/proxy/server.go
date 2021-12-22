@@ -74,6 +74,16 @@ type session struct {
 }
 
 func (s *Server) CreateSession(c echo.Context) error {
+	var req = api.CreateSessionRequest{}
+
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+
+	if !s.validateTarget(req.Target) {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Target [%s] is blocked by the proxy", req.Target))
+	}
+
 	publicKey, privateKey, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return err
@@ -152,24 +162,15 @@ func (s *Server) authorized(req *http.Request) (string, bool, error) {
 }
 
 func (s *Server) authConnection(network, address string) bool {
-	n := strings.SplitN(address, ":", 2)
+	result := s.validateTarget(address)
 
-	host := n[0]
-	port, err := strconv.ParseUint(n[1], 10, 64)
-
-	if err != nil {
-		return false
+	if result {
+		logrus.WithField("network", network).WithField("addr", address).Info("Connection allowed")
+	} else {
+		logrus.WithField("network", network).WithField("addr", address).Info("Connection declined")
 	}
 
-	for _, t := range s.aclPolicy.targetFilters {
-		if t.validate(host, port) {
-			logrus.WithField("network", network).WithField("addr", address).Info("Connection allowed")
-			return true
-		}
-	}
-
-	logrus.WithField("network", network).WithField("addr", address).Info("Connection declined")
-	return false
+	return result
 }
 
 func (s *Server) getPublicKey() (*[32]byte, error) {
@@ -219,4 +220,23 @@ func (s *Server) registerSession(id, key string) (*api.SessionResponse, error) {
 	}
 
 	return &result, nil
+}
+
+func (s *Server) validateTarget(target string) bool {
+	n := strings.SplitN(target, ":", 2)
+
+	host := n[0]
+	port, err := strconv.ParseUint(n[1], 10, 64)
+
+	if err != nil {
+		return false
+	}
+
+	for _, t := range s.aclPolicy.targetFilters {
+		if t.validate(host, port) {
+			return true
+		}
+	}
+
+	return false
 }
