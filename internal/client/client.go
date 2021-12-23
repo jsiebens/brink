@@ -35,7 +35,10 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 		if err != nil {
 			return err
 		}
-		caCertPool := x509.NewCertPool()
+		caCertPool, err := x509.SystemCertPool()
+		if err != nil {
+			caCertPool = x509.NewCertPool()
+		}
 		caCertPool.AppendCertsFromPEM(caCert)
 
 		tlsConfig.RootCAs = caCertPool
