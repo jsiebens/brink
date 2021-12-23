@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/klauspost/compress/zstd"
 	"github.com/mr-tron/base58"
+	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/nacl/box"
 	"io"
 	"net/url"
@@ -82,6 +83,24 @@ func isValidUrl(toTest string) (bool, *url.URL) {
 	}
 
 	return true, u
+}
+
+func ParseOrGenerateKey(key string) (publicKey, privateKey *[32]byte, err error) {
+	if key == "" {
+		return box.GenerateKey(rand.Reader)
+	}
+
+	publicKey = new([32]byte)
+	privateKey = new([32]byte)
+	_, err = hex.Decode(privateKey[:], []byte(key))
+	if err != nil {
+		publicKey = nil
+		privateKey = nil
+		return
+	}
+
+	curve25519.ScalarBaseMult(publicKey, privateKey)
+	return
 }
 
 func GenerateSessionId() string {

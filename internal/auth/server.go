@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/labstack/echo/v4"
 	"github.com/mitchellh/pointerstructure"
-	"golang.org/x/crypto/nacl/box"
 	"net/http"
 	"strings"
 	"time"
@@ -27,7 +25,7 @@ func StartServer(config *Config) error {
 	e.HidePort = true
 	e.Renderer = templates.NewTemplates()
 
-	publicKey, privateKey, err := box.GenerateKey(rand.Reader)
+	publicKey, privateKey, err := util.ParseOrGenerateKey(config.Key)
 	if err != nil {
 		return err
 	}

@@ -41,6 +41,7 @@ func defaultConfig() *Config {
 type Config struct {
 	ListenAddr string `mapstructure:"listen_addr"`
 	ServerUrl  string `mapstructure:"server_url"`
+	Key        string `mapstructure:"key"`
 	Tls        Tls    `mapstructure:"tls"`
 	Oidc       Oidc   `mapstructure:"oidc"`
 }
