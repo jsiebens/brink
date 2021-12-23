@@ -6,6 +6,7 @@ import (
 	"github.com/jsiebens/proxiro/internal/auth"
 	"github.com/jsiebens/proxiro/internal/client"
 	"github.com/jsiebens/proxiro/internal/proxy"
+	"github.com/jsiebens/proxiro/internal/util"
 	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -19,8 +20,10 @@ func main() {
 	cmd := rootCommand()
 	cmd.AddCommand(serverCommand())
 	cmd.AddCommand(proxyCommand())
+	cmd.AddCommand(authenticateCommand())
 	cmd.AddCommand(connectCommand())
 	cmd.AddCommand(sshCommand())
+	cmd.AddCommand(logoutCommand())
 	cmd.AddCommand(versionCommand())
 
 	if err := cmd.Execute(); err != nil {
@@ -78,9 +81,34 @@ func proxyCommand() *cobra.Command {
 	return command
 }
 
+func authenticateCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:          "authenticate",
+		SilenceUsage: true,
+	}
+
+	var proxyAddr string
+	var tlsSkipVerify bool
+	var caFile string
+
+	command.Flags().StringVarP(&proxyAddr, "proxy-addr", "r", "", "")
+	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
+	command.Flags().StringVar(&caFile, "ca-file", "", "")
+
+	_ = command.MarkFlagRequired("proxy-addr")
+	_ = command.MarkFlagRequired("target-addr")
+
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		logrus.SetOutput(ioutil.Discard)
+		return client.Authenticate(cmd.Context(), proxyAddr, caFile, tlsSkipVerify)
+	}
+
+	return command
+}
+
 func connectCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:          "connect [proxy] [target]",
+		Use:          "connect",
 		SilenceUsage: true,
 	}
 
@@ -186,6 +214,31 @@ func sshCommand() *cobra.Command {
 		}
 
 		return <-result
+	}
+
+	return command
+}
+
+func logoutCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:          "logout",
+		SilenceUsage: true,
+	}
+
+	var proxyAddr string
+
+	command.Flags().StringVarP(&proxyAddr, "proxy-addr", "r", "", "")
+
+	_ = command.MarkFlagRequired("proxy-addr")
+
+	command.RunE = func(cmd *cobra.Command, args []string) error {
+		url, err := util.NormalizeProxyUrl(proxyAddr)
+		if err != nil {
+			return err
+		}
+		_ = client.DeleteAuthToken(url.String())
+
+		return nil
 	}
 
 	return command

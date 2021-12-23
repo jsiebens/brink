@@ -87,7 +87,7 @@ func (s *Server) CreateSession(c echo.Context) error {
 		return err
 	}
 
-	if !s.validateTarget(req.Target) {
+	if req.Target != "" && !s.validateTarget(req.Target) {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Target [%s] is blocked by the proxy", req.Target))
 	}
 
@@ -98,8 +98,10 @@ func (s *Server) CreateSession(c echo.Context) error {
 
 	sessionId := util.GenerateSessionId()
 
-	if err := s.sessions.Set(sessionId, &session{PublicKey: publicKey, PrivateKey: privateKey}); err != nil {
-		return err
+	if req.Target != "" {
+		if err := s.sessions.Set(sessionId, &session{PublicKey: publicKey, PrivateKey: privateKey}); err != nil {
+			return err
+		}
 	}
 
 	resp, err := s.registerSession(sessionId, hex.EncodeToString(publicKey[:]))

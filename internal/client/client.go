@@ -17,15 +17,39 @@ import (
 	"time"
 )
 
+func Authenticate(ctx context.Context, proxy string, caFile string, insecureSkipVerify bool) error {
+	clt, err := createClient(proxy, caFile, insecureSkipVerify)
+	if err != nil {
+		return err
+	}
+	return clt.authenticate(ctx)
+}
+
 func StartClient(ctx context.Context, proxy string, listenPort uint64, target string, caFile string, insecureSkipVerify bool, onConnect OnConnect) error {
-	targetBaseUrl, err := util.NormalizeProxyUrl(proxy)
+	clt, err := createClient(proxy, caFile, insecureSkipVerify)
 	if err != nil {
 		return err
 	}
 
-	connectUrl, err := util.NormalizeConnectUrl(proxy)
+	forwarder, err := NewForwarder(listenPort, target, onConnect)
 	if err != nil {
 		return err
+	}
+
+	clt.forwarder = forwarder
+
+	return clt.start(ctx)
+}
+
+func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error) {
+	targetBaseUrl, err := util.NormalizeProxyUrl(proxy)
+	if err != nil {
+		return nil, err
+	}
+
+	connectUrl, err := util.NormalizeConnectUrl(proxy)
+	if err != nil {
+		return nil, err
 	}
 
 	tlsConfig := &tls.Config{}
@@ -33,7 +57,7 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 	if caFile != "" {
 		caCert, err := ioutil.ReadFile(caFile)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		caCertPool, err := x509.SystemCertPool()
 		if err != nil {
@@ -56,20 +80,14 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 		TLSClientConfig:  tlsConfig,
 	}
 
-	forwarder, err := NewForwarder(listenPort, target, onConnect)
-	if err != nil {
-		return err
-	}
-
 	c := &Client{
 		httpClient:    resty.NewWithClient(client),
 		dialer:        dialer,
-		forwarder:     forwarder,
 		targetBaseUrl: targetBaseUrl.String(),
 		connectUrl:    connectUrl.String(),
 	}
 
-	return c.Start(ctx)
+	return c, nil
 }
 
 type Client struct {
@@ -80,7 +98,43 @@ type Client struct {
 	connectUrl    string
 }
 
-func (c *Client) Start(ctx context.Context) error {
+func (c *Client) authenticate(ctx context.Context) error {
+	_ = DeleteAuthToken(c.targetBaseUrl)
+
+	sn, err := c.createSession(ctx)
+	if err != nil {
+		return err
+	}
+
+	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionAuthUrl, sn.SessionId)
+	if err != nil {
+		return err
+	}
+
+	var authToken string
+
+	if authenticate.AuthUrl != "" {
+		err = util.OpenURL(authenticate.AuthUrl)
+		if err != nil {
+			fmt.Println()
+			fmt.Println(authenticate.AuthUrl)
+			fmt.Println()
+		}
+
+		authToken, _, err = c.pollSessionToken(ctx, sn.SessionAuthUrl, sn.SessionId)
+		if err != nil {
+			return err
+		}
+	} else {
+		authToken = authenticate.AuthToken
+	}
+
+	_ = StoreAuthToken(c.targetBaseUrl, authToken)
+
+	return nil
+}
+
+func (c *Client) start(ctx context.Context) error {
 	if err := c.forwarder.Start(); err != nil {
 		return err
 	}
@@ -90,7 +144,7 @@ func (c *Client) Start(ctx context.Context) error {
 		return err
 	}
 
-	authenticate, err := c.authenticate(ctx, "start", sn.SessionAuthUrl, sn.SessionId)
+	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionAuthUrl, sn.SessionId)
 	if err != nil {
 		return err
 	}
@@ -115,7 +169,7 @@ func (c *Client) Start(ctx context.Context) error {
 		sessionToken = authenticate.SessionToken
 	}
 
-	_ = c.storeAuthToken(c.targetBaseUrl, authToken)
+	_ = StoreAuthToken(c.targetBaseUrl, authToken)
 
 	if err := c.connect(ctx, sn.SessionId, sessionToken, c.forwarder.OnTunnelConnect); err != nil {
 		return err
@@ -128,8 +182,14 @@ func (c *Client) createSession(ctx context.Context) (*api.SessionResponse, error
 	var result api.SessionResponse
 	var errMsg api.MessageResponse
 
+	var req = api.CreateSessionRequest{}
+
+	if c.forwarder != nil {
+		req.Target = c.forwarder.remoteAddr
+	}
+
 	resp, err := c.httpClient.R().
-		SetBody(&api.CreateSessionRequest{Target: c.forwarder.remoteAddr}).
+		SetBody(&req).
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).
@@ -146,11 +206,11 @@ func (c *Client) createSession(ctx context.Context) (*api.SessionResponse, error
 	return &result, nil
 }
 
-func (c *Client) authenticate(ctx context.Context, command, url, sessionId string) (*api.AuthenticationResponse, error) {
+func (c *Client) startAuthentication(ctx context.Context, command, url, sessionId string) (*api.AuthenticationResponse, error) {
 	var result api.AuthenticationResponse
 	var errMsg api.MessageResponse
 
-	token, err := c.loadAuthToken(c.targetBaseUrl)
+	token, err := LoadAuthToken(c.targetBaseUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +240,7 @@ func (c *Client) pollSessionToken(ctx context.Context, url, sessionId string) (s
 		case <-ctx.Done():
 			return "", "", ctx.Err()
 		case <-time.After(1500 * time.Millisecond):
-			resp, err := c.authenticate(ctx, "token", url, sessionId)
+			resp, err := c.startAuthentication(ctx, "token", url, sessionId)
 			if err != nil {
 				return "", "", err
 			}

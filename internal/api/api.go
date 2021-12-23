@@ -14,7 +14,7 @@ type AuthenticationResponse struct {
 }
 
 type CreateSessionRequest struct {
-	Target string `json:"target"`
+	Target  string `json:"target"`
 }
 
 type RegisterSessionRequest struct {
