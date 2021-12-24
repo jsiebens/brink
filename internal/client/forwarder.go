@@ -10,7 +10,7 @@ import (
 	"sync"
 )
 
-type OnConnect func(context.Context, string) error
+type OnConnect func(ctx context.Context, addr, ip, port string) error
 
 type Forwarder struct {
 	sync.Mutex
@@ -81,7 +81,11 @@ func (f *Forwarder) OnTunnelConnect(ctx context.Context, session *remotedialer.S
 	}()
 
 	if f.onConnect != nil {
-		return f.onConnect(ctx, f.listener.Addr().String())
+		host, port, err := net.SplitHostPort(f.listener.Addr().String())
+		if err != nil {
+			panic(err)
+		}
+		return f.onConnect(ctx, f.listener.Addr().String(), host, port)
 	}
 
 	return nil

@@ -2,11 +2,12 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 )
 
-func StartNC(ctx context.Context, addr string) error {
+func StartNC(ctx context.Context, addr, host, port string) error {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return err
@@ -17,5 +18,10 @@ func StartNC(ctx context.Context, addr string) error {
 	go pipe(closer, os.Stdout, conn)
 	<-closer
 
+	return nil
+}
+
+func PrintListenerInfo(ctx context.Context, addr, host, port string) error {
+	fmt.Printf("\n  Listening on %s\n\n", addr)
 	return nil
 }

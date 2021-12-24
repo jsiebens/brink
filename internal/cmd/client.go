@@ -6,10 +6,11 @@ import (
 	"github.com/jsiebens/proxiro/internal/client"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	exec "golang.org/x/sys/execabs"
+	"golang.org/x/sys/execabs"
 	"io/ioutil"
 	"net"
 	"os"
+	"strings"
 )
 
 func connectCommand() *cobra.Command {
@@ -22,17 +23,22 @@ func connectCommand() *cobra.Command {
 	var targetAddrFlag string
 	var listenPort uint64
 	var listenOnStdin bool
+	var execCommand string
 	var tlsSkipVerify bool
 	var caFile string
 
 	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", "")
 	command.Flags().StringVarP(&targetAddrFlag, "target-addr", "t", "", "")
+	command.Flags().StringVarP(&execCommand, "exec", "e", "", "")
 	command.Flags().Uint64Var(&listenPort, "listen-port", 0, "")
 	command.Flags().BoolVar(&listenOnStdin, "listen-on-stdin", false, "")
 	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
 	command.Flags().StringVar(&caFile, "ca-file", "", "")
 
 	command.RunE = func(cmd *cobra.Command, args []string) error {
+		cancelCtx, cancelFunc := context.WithCancel(cmd.Context())
+		defer cancelFunc()
+
 		logrus.SetOutput(ioutil.Discard)
 
 		proxyAddr := getString(ProxiroProxy, proxyAddrFlag)
@@ -45,19 +51,30 @@ func connectCommand() *cobra.Command {
 			return fmt.Errorf("required flag --target-addr is missing")
 		}
 
+		if listenOnStdin && execCommand != "" {
+			return fmt.Errorf("flags --listen-on-stdin and --exec are mutually exclusive")
+		}
+
 		_, _, err := net.SplitHostPort(targetAddr)
 		if err != nil {
 			return err
 		}
 
-		if !listenOnStdin {
-			return client.StartClient(cmd.Context(), proxyAddr, listenPort, targetAddr, caFile, tlsSkipVerify, func(ctx context.Context, addr string) error {
-				fmt.Printf("\n  Listening on %s\n\n", addr)
-				return nil
-			})
-		} else {
-			return client.StartClient(cmd.Context(), proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, client.StartNC)
+		if listenOnStdin {
+			return client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, client.StartNC)
 		}
+
+		if execCommand != "" {
+			onConnect, result := execOnConnect(execCommand, noArgs, args, cancelFunc)
+
+			if err := client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, onConnect); err != nil {
+				return err
+			}
+
+			return <-result
+		}
+
+		return client.StartClient(cancelCtx, proxyAddr, listenPort, targetAddr, caFile, tlsSkipVerify, client.PrintListenerInfo)
 	}
 
 	return command
@@ -71,13 +88,13 @@ func sshCommand() *cobra.Command {
 
 	var proxyAddrFlag string
 	var targetAddrFlag string
-	var userName string
+	var username string
 	var tlsSkipVerify bool
 	var caFile string
 
 	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", "")
 	command.Flags().StringVarP(&targetAddrFlag, "target-addr", "t", "", "")
-	command.Flags().StringVarP(&userName, "username", "u", "", "")
+	command.Flags().StringVarP(&username, "username", "u", "", "")
 	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
 	command.Flags().StringVar(&caFile, "ca-file", "", "")
 
@@ -102,32 +119,16 @@ func sshCommand() *cobra.Command {
 			return err
 		}
 
-		result := make(chan error, 2)
-
-		onConnect := func(ctx context.Context, addr string) error {
-			defer cancelFunc()
-
-			host, port, err := net.SplitHostPort(addr)
-			if err != nil {
-				result <- err
-				return err
+		buildArgs := func(addr, ip, port string) (sshArgs []string) {
+			sshArgs = append(sshArgs, "-p", port, ip)
+			sshArgs = append(sshArgs, "-o", fmt.Sprintf("HostKeyAlias=%s", targetAddr))
+			if username != "" {
+				sshArgs = append(sshArgs, "-l", username)
 			}
-
-			var sargs []string
-			sargs = append(sargs, "-p", port, host)
-			sargs = append(sargs, "-o", fmt.Sprintf("HostKeyAlias=%s", targetAddr))
-			if userName != "" {
-				sargs = append(sargs, "-l", userName)
-			}
-
-			ecmd := exec.Command("ssh", sargs...)
-			ecmd.Stdin = os.Stdin
-			ecmd.Stdout = os.Stdout
-			ecmd.Stderr = os.Stderr
-			err = ecmd.Run()
-			result <- err
-			return err
+			return
 		}
+
+		onConnect, result := execOnConnect("ssh", buildArgs, args, cancelFunc)
 
 		if err := client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, onConnect); err != nil {
 			return err
@@ -137,4 +138,45 @@ func sshCommand() *cobra.Command {
 	}
 
 	return command
+}
+
+func execOnConnect(cmd string, buildArgs func(addr string, ip string, port string) []string, passthroughArgs []string, cancel context.CancelFunc) (client.OnConnect, chan error) {
+	result := make(chan error, 2)
+	return func(ctx context.Context, addr, ip, port string) error {
+		defer cancel()
+
+		stringReplacer := func(in, typ, replacer string) string {
+			for _, style := range []string{
+				fmt.Sprintf("{{proxiro.%s}}", typ),
+				fmt.Sprintf("{{ proxiro.%s}}", typ),
+				fmt.Sprintf("{{proxiro.%s }}", typ),
+				fmt.Sprintf("{{ proxiro.%s }}", typ),
+			} {
+				in = strings.Replace(in, style, replacer, -1)
+			}
+			return in
+		}
+
+		var args []string
+		args = append(buildArgs(addr, ip, port))
+		args = append(passthroughArgs, args...)
+
+		for i := range args {
+			args[i] = stringReplacer(args[i], "port", port)
+			args[i] = stringReplacer(args[i], "ip", ip)
+			args[i] = stringReplacer(args[i], "addr", addr)
+		}
+
+		ecmd := execabs.Command(cmd, args...)
+		ecmd.Stdin = os.Stdin
+		ecmd.Stdout = os.Stdout
+		ecmd.Stderr = os.Stderr
+		err := ecmd.Run()
+		result <- err
+		return err
+	}, result
+}
+
+func noArgs(addr, ip, port string) []string {
+	return []string{}
 }
