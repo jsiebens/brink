@@ -8,8 +8,8 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jsiebens/proxiro/internal/api"
 	"github.com/jsiebens/proxiro/internal/cache"
+	"github.com/jsiebens/proxiro/internal/config"
 	"github.com/jsiebens/proxiro/internal/util"
-	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/labstack/echo/v4"
 	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
@@ -25,30 +25,80 @@ const (
 	AuthHeader = "x-proxiro-auth"
 )
 
-func StartServer(config *Config) error {
-	url, err := util.NormalizeProxyUrl(config.AuthServer)
+type remoteSessionRegistrar struct {
+	client            *resty.Client
+	authServerBaseUrl string
+}
+
+func (r *remoteSessionRegistrar) GetPublicKey() (*[32]byte, error) {
+	var result api.KeyResponse
+	var errMsg api.MessageResponse
+
+	resp, err := r.client.R().
+		SetResult(&result).
+		SetError(&errMsg).
+		SetContext(context.Background()).
+		Get(r.authServerBaseUrl + "/a/key")
+
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
+	}
+
+	return util.ParseKey(result.Key)
+}
+
+func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionResponse, error) {
+	var result api.SessionResponse
+	var errMsg api.MessageResponse
+
+	resp, err := r.client.R().
+		SetBody(req).
+		SetResult(&result).
+		SetError(&errMsg).
+		SetContext(context.Background()).
+		Post(r.authServerBaseUrl + "/a/session")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
+	}
+
+	return &result, nil
+}
+
+func NewServer(config *config.Config, registrar api.SessionRegistrar) (*Server, error) {
+	if registrar == nil {
+		url, err := util.NormalizeAuthServerUrl(config.AuthServer)
+		if err != nil {
+			return nil, err
+		}
+
+		registrar = &remoteSessionRegistrar{
+			client:            resty.New(),
+			authServerBaseUrl: url.String(),
+		}
 	}
 
 	targetFilters, err := parseTargetFilters(config.ACLPolicy.Targets)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	checksum, err := util.Checksum(&config.ACLPolicy)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	e := echo.New()
-	e.HideBanner = true
-	e.HidePort = true
-
 	server := &Server{
-		client:            resty.New(),
-		authServerBaseUrl: url.String(),
-		sessions:          cache.NewMemoryCache(),
+		sessionRegistrar: registrar,
+		sessions:         cache.NewMemoryCache(),
 		aclPolicy: aclPolicy{
 			identityFilters: config.ACLPolicy.Identity,
 			targetFilters:   targetFilters,
@@ -56,23 +106,14 @@ func StartServer(config *Config) error {
 		checksum: checksum,
 	}
 
-	e.GET("/version", version.GetReleaseInfoHandler)
-	e.Any("/p/connect", server.Proxy())
-	e.POST("/p/session", server.CreateSession)
-
-	if config.Tls.KeyFile == "" {
-		return e.Start(config.ListenAddr)
-	} else {
-		return e.StartTLS(config.ListenAddr, config.Tls.CertFile, config.Tls.KeyFile)
-	}
+	return server, nil
 }
 
 type Server struct {
-	client            *resty.Client
-	sessions          cache.Cache
-	authServerBaseUrl string
-	aclPolicy         aclPolicy
-	checksum          string
+	sessionRegistrar api.SessionRegistrar
+	sessions         cache.Cache
+	aclPolicy        aclPolicy
+	checksum         string
 }
 
 type session struct {
@@ -80,7 +121,12 @@ type session struct {
 	PrivateKey *[32]byte
 }
 
-func (s *Server) CreateSession(c echo.Context) error {
+func (s *Server) RegisterRoutes(e *echo.Echo) {
+	e.Any("/p/connect", s.proxy())
+	e.POST("/p/session", s.createSession)
+}
+
+func (s *Server) createSession(c echo.Context) error {
 	var req = api.CreateSessionRequest{}
 
 	if err := c.Bind(&req); err != nil {
@@ -112,7 +158,7 @@ func (s *Server) CreateSession(c echo.Context) error {
 	return c.JSON(http.StatusOK, &resp)
 }
 
-func (s *Server) Proxy() echo.HandlerFunc {
+func (s *Server) proxy() echo.HandlerFunc {
 	rd := remotedialer.New(s.authorized, remotedialer.DefaultErrorWriter)
 	rd.ClientConnectAuthorizer = s.authConnection
 	return echo.WrapHandler(rd)
@@ -135,7 +181,7 @@ func (s *Server) authorized(req *http.Request) (string, bool, error) {
 		return "", false, nil
 	}
 
-	publicKey, err := s.getPublicKey()
+	publicKey, err := s.sessionRegistrar.GetPublicKey()
 	if err != nil {
 		return "", false, err
 	}
@@ -172,27 +218,6 @@ func (s *Server) authConnection(network, address string) bool {
 	return result
 }
 
-func (s *Server) getPublicKey() (*[32]byte, error) {
-	var result api.KeyResponse
-	var errMsg api.MessageResponse
-
-	resp, err := s.client.R().
-		SetResult(&result).
-		SetError(&errMsg).
-		SetContext(context.Background()).
-		Get(s.authServerBaseUrl + "/a/key")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
-	}
-
-	return util.ParseKey(result.Key)
-}
-
 func (s *Server) registerSession(id, key string) (*api.SessionResponse, error) {
 	request := api.RegisterSessionRequest{
 		SessionId:  id,
@@ -201,25 +226,7 @@ func (s *Server) registerSession(id, key string) (*api.SessionResponse, error) {
 		Checksum:   s.checksum,
 	}
 
-	var result api.SessionResponse
-	var errMsg api.MessageResponse
-
-	resp, err := s.client.R().
-		SetBody(&request).
-		SetResult(&result).
-		SetError(&errMsg).
-		SetContext(context.Background()).
-		Post(s.authServerBaseUrl + "/a/session")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
-	}
-
-	return &result, nil
+	return s.sessionRegistrar.RegisterSession(&request)
 }
 
 func (s *Server) validateTarget(target string) bool {

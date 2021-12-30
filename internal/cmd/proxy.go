@@ -1,7 +1,8 @@
 package cmd
 
 import (
-	"github.com/jsiebens/proxiro/internal/proxy"
+	"github.com/jsiebens/proxiro/internal/config"
+	"github.com/jsiebens/proxiro/internal/server"
 	"github.com/spf13/cobra"
 )
 
@@ -16,12 +17,11 @@ func proxyCommand() *cobra.Command {
 	command.Flags().StringVarP(&configFile, "config", "c", "", "Path to the configuration file.")
 
 	command.RunE = func(command *cobra.Command, args []string) error {
-		c, err := proxy.LoadConfig(configFile)
+		c, err := config.LoadConfig(configFile)
 		if err != nil {
 			return err
 		}
-
-		return proxy.StartServer(c)
+		return server.StartProxy(c)
 	}
 
 	return command

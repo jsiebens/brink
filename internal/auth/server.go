@@ -7,11 +7,10 @@ import (
 	"github.com/hashicorp/go-bexpr"
 	"github.com/jsiebens/proxiro/internal/api"
 	"github.com/jsiebens/proxiro/internal/auth/providers"
-	"github.com/jsiebens/proxiro/internal/auth/templates"
 	"github.com/jsiebens/proxiro/internal/cache"
+	"github.com/jsiebens/proxiro/internal/config"
 	"github.com/jsiebens/proxiro/internal/proxy"
 	"github.com/jsiebens/proxiro/internal/util"
-	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/labstack/echo/v4"
 	"github.com/mitchellh/pointerstructure"
 	"net/http"
@@ -19,15 +18,10 @@ import (
 	"time"
 )
 
-func StartServer(config *Config) error {
-	e := echo.New()
-	e.HideBanner = true
-	e.HidePort = true
-	e.Renderer = templates.NewTemplates()
-
+func NewServer(config *config.Config) (*Server, error) {
 	publicKey, privateKey, err := util.ParseOrGenerateKey(config.Key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	oidc := &providers.OIDCAuthConfig{
@@ -38,7 +32,7 @@ func StartServer(config *Config) error {
 
 	provider, err := providers.NewOIDCProvider(oidc)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	server := &Server{
@@ -49,20 +43,7 @@ func StartServer(config *Config) error {
 		sessions:   cache.NewMemoryCache(),
 	}
 
-	e.GET("/version", version.GetReleaseInfoHandler)
-	e.GET("/a/key", server.Key)
-	e.POST("/a/session", server.RegisterSession)
-	e.POST("/a/auth", server.Auth)
-	e.GET("/a/callback", server.CallbackOAuth)
-	e.GET("/a/success", server.Success)
-	e.GET("/a/unauthorized", server.Unauthorized)
-	e.GET("/a/error", server.CallbackError)
-
-	if config.Tls.KeyFile == "" {
-		return e.Start(config.ListenAddr)
-	} else {
-		return e.StartTLS(config.ListenAddr, config.Tls.CertFile, config.Tls.KeyFile)
-	}
+	return server, nil
 }
 
 type Server struct {
@@ -87,12 +68,39 @@ type oauthState struct {
 	Key       string
 }
 
-func (s *Server) Key(c echo.Context) error {
-	resp := api.KeyResponse{Key: hex.EncodeToString(s.publicKey[:])}
-	return c.JSON(http.StatusOK, &resp)
+func (s *Server) RegisterRoutes(e *echo.Echo) {
+	e.GET("/a/key", s.key)
+	e.POST("/a/session", s.registerSession)
+	e.POST("/a/auth", s.auth)
+	e.GET("/a/callback", s.callbackOAuth)
+	e.GET("/a/success", s.success)
+	e.GET("/a/unauthorized", s.unauthorized)
+	e.GET("/a/error", s.callbackError)
 }
 
-func (s *Server) RegisterSession(c echo.Context) error {
+func (s *Server) GetPublicKey() (*[32]byte, error) {
+	return s.publicKey, nil
+}
+
+func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionResponse, error) {
+	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Filters: req.Filters, Checksum: req.Checksum}); err != nil {
+		return nil, err
+	}
+
+	response := api.SessionResponse{
+		SessionId:      req.SessionId,
+		SessionAuthUrl: s.createUrl("/a/auth"),
+	}
+
+	return &response, nil
+}
+
+func (s *Server) key(c echo.Context) error {
+	key, _ := s.GetPublicKey()
+	return c.JSON(http.StatusOK, &api.KeyResponse{Key: hex.EncodeToString(key[:])})
+}
+
+func (s *Server) registerSession(c echo.Context) error {
 	req := api.RegisterSessionRequest{}
 
 	if err := c.Bind(&req); err != nil {
@@ -111,7 +119,7 @@ func (s *Server) RegisterSession(c echo.Context) error {
 	return c.JSON(http.StatusOK, &response)
 }
 
-func (s *Server) Auth(c echo.Context) error {
+func (s *Server) auth(c echo.Context) error {
 	req := api.AuthenticationRequest{}
 
 	if err := c.Bind(&req); err != nil {
@@ -193,7 +201,7 @@ func (s *Server) Auth(c echo.Context) error {
 	return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 }
 
-func (s *Server) CallbackOAuth(c echo.Context) error {
+func (s *Server) callbackOAuth(c echo.Context) error {
 	state, err := s.readOAuthState(c.QueryParam("state"))
 	if err != nil {
 		return nil
@@ -266,15 +274,15 @@ func (s *Server) CallbackOAuth(c echo.Context) error {
 	}
 }
 
-func (s *Server) Success(c echo.Context) error {
+func (s *Server) success(c echo.Context) error {
 	return c.Render(http.StatusOK, "success.html", nil)
 }
 
-func (s *Server) Unauthorized(c echo.Context) error {
+func (s *Server) unauthorized(c echo.Context) error {
 	return c.Render(http.StatusOK, "unauthorized.html", nil)
 }
 
-func (s *Server) CallbackError(c echo.Context) error {
+func (s *Server) callbackError(c echo.Context) error {
 	return c.Render(http.StatusOK, "error.html", nil)
 }
 

@@ -42,7 +42,7 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 }
 
 func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error) {
-	targetBaseUrl, err := util.NormalizeProxyUrl(proxy)
+	targetBaseUrl, err := util.NormalizeAuthServerUrl(proxy)
 	if err != nil {
 		return nil, err
 	}

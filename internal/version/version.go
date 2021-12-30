@@ -30,3 +30,7 @@ func GetReleaseInfoHandler(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, m)
 }
+
+func RegisterRoutes(e *echo.Echo) {
+	e.GET("/version", GetReleaseInfoHandler)
+}

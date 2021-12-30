@@ -42,7 +42,7 @@ func NormalizeConnectUrl(input string) (*url.URL, error) {
 	return nil, fmt.Errorf("invalid target")
 }
 
-func NormalizeProxyUrl(input string) (*url.URL, error) {
+func NormalizeAuthServerUrl(input string) (*url.URL, error) {
 
 	normalizeUrl := func(u *url.URL) (*url.URL, error) {
 		switch u.Scheme {

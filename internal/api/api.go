@@ -14,7 +14,7 @@ type AuthenticationResponse struct {
 }
 
 type CreateSessionRequest struct {
-	Target  string `json:"target"`
+	Target string `json:"target"`
 }
 
 type RegisterSessionRequest struct {
@@ -43,4 +43,9 @@ type UserToken struct {
 	Email          string    `json:"email"`
 	ExpirationTime time.Time `json:"exp"`
 	Checksum       string    `json:"cs"`
+}
+
+type SessionRegistrar interface {
+	GetPublicKey() (*[32]byte, error)
+	RegisterSession(request *RegisterSessionRequest) (*SessionResponse, error)
 }

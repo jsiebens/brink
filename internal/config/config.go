@@ -1,4 +1,4 @@
-package auth
+package config
 
 import (
 	"github.com/iamolegga/enviper"
@@ -35,15 +35,21 @@ func defaultConfig() *Config {
 	return &Config{
 		ListenAddr: ":7000",
 		ServerUrl:  "http://localhost:7000",
+		AuthServer: "http://localhost:7000",
+		Tls:        Tls{},
+		Oidc:       Oidc{},
+		ACLPolicy:  ACLPolicy{},
 	}
 }
 
 type Config struct {
-	ListenAddr string `mapstructure:"listen_addr"`
-	ServerUrl  string `mapstructure:"server_url"`
-	Key        string `mapstructure:"key"`
-	Tls        Tls    `mapstructure:"tls"`
-	Oidc       Oidc   `mapstructure:"oidc"`
+	ListenAddr string    `mapstructure:"listen_addr"`
+	ServerUrl  string    `mapstructure:"server_url"`
+	AuthServer string    `mapstructure:"auth_server"`
+	Key        string    `mapstructure:"key"`
+	Tls        Tls       `mapstructure:"tls"`
+	Oidc       Oidc      `mapstructure:"oidc"`
+	ACLPolicy  ACLPolicy `mapstructure:"acl_policy"`
 }
 
 type Tls struct {
@@ -55,4 +61,9 @@ type Oidc struct {
 	Issuer       string `mapstructure:"issuer"`
 	ClientID     string `mapstructure:"client_id"`
 	ClientSecret string `mapstructure:"client_secret"`
+}
+
+type ACLPolicy struct {
+	Identity []string `mapstructure:"identities"`
+	Targets  []string `mapstructure:"targets"`
 }
