@@ -73,7 +73,7 @@ func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest
 	return &result, nil
 }
 
-func NewServer(config *config.Config, registrar api.SessionRegistrar) (*Server, error) {
+func NewServer(config *config.Config, cache cache.Cache, registrar api.SessionRegistrar) (*Server, error) {
 	if registrar == nil {
 		url, err := util.NormalizeAuthServerUrl(config.AuthServer)
 		if err != nil {
@@ -98,7 +98,7 @@ func NewServer(config *config.Config, registrar api.SessionRegistrar) (*Server, 
 
 	server := &Server{
 		sessionRegistrar: registrar,
-		sessions:         cache.NewMemoryCache(),
+		sessions:         cache,
 		aclPolicy: aclPolicy{
 			identityFilters: config.ACLPolicy.Identity,
 			targetFilters:   targetFilters,

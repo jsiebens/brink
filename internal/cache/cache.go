@@ -1,10 +1,12 @@
 package cache
 
 import (
-	"encoding/json"
-	"github.com/patrickmn/go-cache"
+	"fmt"
+	"github.com/jsiebens/proxiro/internal/config"
 	"time"
 )
+
+const DefaultExpiration = 10 * time.Minute
 
 type Cache interface {
 	Set(id string, v interface{}) error
@@ -12,36 +14,37 @@ type Cache interface {
 	Delete(id string) error
 }
 
-func NewMemoryCache() Cache {
-	return &MemoryCache{
-		cache: cache.New(10*time.Minute, 5*time.Minute),
+func NewCache(config config.Cache) (Cache, error) {
+	switch config.Type {
+	case "inmemory":
+		return NewMemoryCache(), nil
+	case "redis":
+		return NewRedisCache(config.RedisAddr, config.RedisPassword, config.RedisDB, 3), nil
+	default:
+		return nil, fmt.Errorf("invalid cache type [%s]", config.Type)
 	}
 }
 
-type MemoryCache struct {
-	cache *cache.Cache
-}
-
-func (m *MemoryCache) Set(id string, v interface{}) error {
-	msg, err := json.Marshal(v)
-	if err != nil {
-		return err
+func Prefixed(cache Cache, prefix string) Cache {
+	return &prefixedCache{
+		prefix: prefix,
+		cache:  cache,
 	}
-	m.cache.Set(id, msg, cache.DefaultExpiration)
-	return nil
 }
 
-func (m *MemoryCache) Get(id string, v interface{}) (bool, error) {
-	msg, b := m.cache.Get(id)
-
-	if !b {
-		return b, nil
-	}
-
-	return true, json.Unmarshal(msg.([]byte), v)
+type prefixedCache struct {
+	prefix string
+	cache  Cache
 }
 
-func (m *MemoryCache) Delete(id string) error {
-	m.cache.Delete(id)
-	return nil
+func (p *prefixedCache) Set(id string, v interface{}) error {
+	return p.cache.Set(p.prefix+id, v)
+}
+
+func (p *prefixedCache) Get(id string, v interface{}) (bool, error) {
+	return p.cache.Get(p.prefix+id, v)
+}
+
+func (p *prefixedCache) Delete(id string) error {
+	return p.cache.Delete(p.prefix + id)
 }

@@ -3,14 +3,24 @@ package server
 import (
 	"github.com/jsiebens/proxiro/internal/auth"
 	"github.com/jsiebens/proxiro/internal/auth/templates"
+	"github.com/jsiebens/proxiro/internal/cache"
 	"github.com/jsiebens/proxiro/internal/config"
 	"github.com/jsiebens/proxiro/internal/proxy"
 	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/labstack/echo/v4"
 )
 
+const authCachePrefix = "a_"
+const proxyCachePrefix = "p_"
+
 func StartServer(config *config.Config) error {
-	authServer, err := auth.NewServer(config)
+
+	c, err := cache.NewCache(config.Cache)
+	if err != nil {
+		return err
+	}
+
+	authServer, err := auth.NewServer(config, cache.Prefixed(c, authCachePrefix))
 	if err != nil {
 		return err
 	}
@@ -24,7 +34,7 @@ func StartServer(config *config.Config) error {
 	authServer.RegisterRoutes(e)
 
 	if len(config.ACLPolicy.Identity) != 0 && len(config.ACLPolicy.Targets) != 0 {
-		proxyServer, err := proxy.NewServer(config, authServer)
+		proxyServer, err := proxy.NewServer(config, cache.Prefixed(c, proxyCachePrefix), authServer)
 		if err != nil {
 			return err
 		}
@@ -40,7 +50,13 @@ func StartServer(config *config.Config) error {
 }
 
 func StartProxy(config *config.Config) error {
-	server, err := proxy.NewServer(config, nil)
+
+	c, err := cache.NewCache(config.Cache)
+	if err != nil {
+		return err
+	}
+
+	server, err := proxy.NewServer(config, cache.Prefixed(c, proxyCachePrefix), nil)
 	if err != nil {
 		return err
 	}

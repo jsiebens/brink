@@ -39,6 +39,9 @@ func defaultConfig() *Config {
 		Tls:        Tls{},
 		Oidc:       Oidc{},
 		ACLPolicy:  ACLPolicy{},
+		Cache: Cache{
+			Type: "inmemory",
+		},
 	}
 }
 
@@ -47,6 +50,7 @@ type Config struct {
 	ServerUrl  string    `mapstructure:"server_url"`
 	AuthServer string    `mapstructure:"auth_server"`
 	Key        string    `mapstructure:"key"`
+	Cache      Cache     `mapstructure:"cache"`
 	Tls        Tls       `mapstructure:"tls"`
 	Oidc       Oidc      `mapstructure:"oidc"`
 	ACLPolicy  ACLPolicy `mapstructure:"acl_policy"`
@@ -66,4 +70,11 @@ type Oidc struct {
 type ACLPolicy struct {
 	Identity []string `mapstructure:"identities"`
 	Targets  []string `mapstructure:"targets"`
+}
+
+type Cache struct {
+	Type          string `mapstructure:"type"`
+	RedisAddr     string `mapstructure:"redis_addr"`
+	RedisDB       int    `mapstructure:"redis_db"`
+	RedisPassword string `mapstructure:"redis_password"`
 }

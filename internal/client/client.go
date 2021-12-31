@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/gorilla/websocket"
@@ -42,6 +43,8 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 }
 
 func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error) {
+	var caCertPool *x509.CertPool
+
 	targetBaseUrl, err := util.NormalizeAuthServerUrl(proxy)
 	if err != nil {
 		return nil, err
@@ -52,24 +55,30 @@ func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error
 		return nil, err
 	}
 
-	tlsConfig := &tls.Config{}
+	caCertPool, err = x509.SystemCertPool()
+	if err != nil {
+		caCertPool = x509.NewCertPool()
+	}
 
 	if caFile != "" {
 		caCert, err := ioutil.ReadFile(caFile)
 		if err != nil {
 			return nil, err
 		}
-		caCertPool, err := x509.SystemCertPool()
-		if err != nil {
-			caCertPool = x509.NewCertPool()
-		}
 		caCertPool.AppendCertsFromPEM(caCert)
-
-		tlsConfig.RootCAs = caCertPool
 	}
 
-	if insecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = insecureSkipVerify
+	ca := fetchCa(targetBaseUrl.String())
+	if ca != nil {
+		ok := caCertPool.AppendCertsFromPEM(ca)
+		if !ok {
+			return nil, errors.New("invalid ca")
+		}
+	}
+
+	tlsConfig := &tls.Config{
+		RootCAs:            caCertPool,
+		InsecureSkipVerify: insecureSkipVerify,
 	}
 
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
@@ -265,4 +274,25 @@ func (c *Client) connect(ctx context.Context, id, token string, onConnect func(c
 func (c *Client) declineAll(network, address string) bool {
 	logrus.WithField("network", network).WithField("addr", address).Info("Connection declined")
 	return false
+}
+
+func fetchCa(baseUrl string) []byte {
+	tlsConfig := &tls.Config{InsecureSkipVerify: true}
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+
+	var errMsg api.MessageResponse
+
+	resp, err := resty.NewWithClient(client).R().
+		SetError(&errMsg).
+		Get(baseUrl + "/.well-known/ca")
+
+	if err != nil {
+		return nil
+	}
+
+	if resp.StatusCode() == http.StatusOK {
+		return resp.Body()
+	}
+
+	return nil
 }
