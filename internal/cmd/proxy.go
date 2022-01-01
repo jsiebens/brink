@@ -9,6 +9,7 @@ import (
 func proxyCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "proxy",
+		Short:        "Start a proxy with a configuration file.",
 		SilenceUsage: true,
 	}
 

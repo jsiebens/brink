@@ -9,6 +9,7 @@ import (
 func serverCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "server",
+		Short:        "Start a server (and optionally a proxy) with a configuration file.",
 		SilenceUsage: true,
 	}
 

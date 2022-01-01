@@ -12,21 +12,16 @@ import (
 func authenticateCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "authenticate",
+		Short:        "Authenticate the Proxiro Client for a specific Proxy.",
 		SilenceUsage: true,
 	}
 
-	var proxyAddrFlag string
-	var tlsSkipVerify bool
-	var caFile string
-
-	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", "")
-	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
-	command.Flags().StringVar(&caFile, "ca-file", "", "")
+	registerProxyFlags(command)
 
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		logrus.SetOutput(ioutil.Discard)
 
-		proxyAddr := getString(ProxiroProxy, proxyAddrFlag)
+		proxyAddr := getString(ProxiroProxyAddr, proxyAddrFlag)
 		if proxyAddr == "" {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}
@@ -40,15 +35,14 @@ func authenticateCommand() *cobra.Command {
 func logoutCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "logout",
+		Short:        "Delete the current token from the local store.",
 		SilenceUsage: true,
 	}
 
-	var proxyAddrFlag string
-
-	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", "")
+	registerProxyFlags(command)
 
 	command.RunE = func(cmd *cobra.Command, args []string) error {
-		proxyAddr := getString(ProxiroProxy, proxyAddrFlag)
+		proxyAddr := getString(ProxiroProxyAddr, proxyAddrFlag)
 		if proxyAddr == "" {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}

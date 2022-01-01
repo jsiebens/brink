@@ -13,27 +13,35 @@ import (
 	"strings"
 )
 
+var (
+	proxyAddrFlag string
+	tlsSkipVerify bool
+	caFile        string
+)
+
+func registerProxyFlags(command *cobra.Command) {
+	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", fmt.Sprintf("Addr of the Proxiro proxy. This can also be specified via the environment variable %s.", ProxiroProxyAddr))
+	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "Disable verification of TLS certificates, highly discouraged as it decreases the security of data transmissions.")
+	command.Flags().StringVar(&caFile, "ca-file", "", "Path on the local disk to a single PEM-encoded CA certificate to verify the proxy or server SSL certificate.")
+}
+
 func connectCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "connect",
+		Short:        "Start a tunnel to a proxy for TCP forwarding through which another process can create a connection (eg. SSH, PostgreSQL) to a remote target.",
 		SilenceUsage: true,
 	}
 
-	var proxyAddrFlag string
 	var targetAddrFlag string
 	var listenPort uint64
 	var listenOnStdin bool
 	var execCommand string
-	var tlsSkipVerify bool
-	var caFile string
 
-	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", "")
-	command.Flags().StringVarP(&targetAddrFlag, "target-addr", "t", "", "")
-	command.Flags().StringVarP(&execCommand, "exec", "e", "", "")
-	command.Flags().Uint64Var(&listenPort, "listen-port", 0, "")
-	command.Flags().BoolVar(&listenOnStdin, "listen-on-stdin", false, "")
-	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
-	command.Flags().StringVar(&caFile, "ca-file", "", "")
+	registerProxyFlags(command)
+	command.Flags().StringVarP(&targetAddrFlag, "target-addr", "t", "", "Addr of the remote target the connections should be tunneled to.")
+	command.Flags().StringVarP(&execCommand, "exec", "e", "", "If set, after connecting to the worker, the given binary will be executed. This should be a binary on your path, or an absolute path.")
+	command.Flags().Uint64VarP(&listenPort, "listen-port", "p", 0, "Port on which the client should bind and listen for connections that should be tunneled.")
+	command.Flags().BoolVarP(&listenOnStdin, "listen-on-stdin", "W", false, "If true, the standard input and standard output on the client is forward to the target over the tunnel.")
 
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		cancelCtx, cancelFunc := context.WithCancel(cmd.Context())
@@ -41,12 +49,12 @@ func connectCommand() *cobra.Command {
 
 		logrus.SetOutput(ioutil.Discard)
 
-		proxyAddr := getString(ProxiroProxy, proxyAddrFlag)
+		proxyAddr := getString(ProxiroProxyAddr, proxyAddrFlag)
 		if proxyAddr == "" {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}
 
-		targetAddr := getString(ProxiroTarget, targetAddrFlag)
+		targetAddr := getString(ProxiroTargetAddr, targetAddrFlag)
 		if targetAddr == "" {
 			return fmt.Errorf("required flag --target-addr is missing")
 		}
@@ -83,20 +91,16 @@ func connectCommand() *cobra.Command {
 func sshCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "ssh",
+		Short:        "Start a tunnel to a proxy and launches a proxied ssh connection.",
 		SilenceUsage: true,
 	}
 
-	var proxyAddrFlag string
 	var targetAddrFlag string
 	var username string
-	var tlsSkipVerify bool
-	var caFile string
 
-	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", "")
-	command.Flags().StringVarP(&targetAddrFlag, "target-addr", "t", "", "")
-	command.Flags().StringVarP(&username, "username", "u", "", "")
-	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "")
-	command.Flags().StringVar(&caFile, "ca-file", "", "")
+	registerProxyFlags(command)
+	command.Flags().StringVarP(&targetAddrFlag, "target-addr", "t", "", "Addr of the remote target the connections should be tunneled to.")
+	command.Flags().StringVarP(&username, "username", "u", "", "Specifies the username to pass through to the client")
 
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		cancelCtx, cancelFunc := context.WithCancel(cmd.Context())
@@ -104,12 +108,12 @@ func sshCommand() *cobra.Command {
 
 		logrus.SetOutput(ioutil.Discard)
 
-		proxyAddr := getString(ProxiroProxy, proxyAddrFlag)
+		proxyAddr := getString(ProxiroProxyAddr, proxyAddrFlag)
 		if proxyAddr == "" {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}
 
-		targetAddr := getString(ProxiroTarget, targetAddrFlag)
+		targetAddr := getString(ProxiroTargetAddr, targetAddrFlag)
 		if targetAddr == "" {
 			return fmt.Errorf("required flag --target-addr is missing")
 		}

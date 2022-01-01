@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	ProxiroProxy  = "PROXIRO_PROXY"
-	ProxiroTarget = "PROXIRO_TARGET"
+	ProxiroProxyAddr  = "PROXIRO_PROXY_ADDR"
+	ProxiroTargetAddr = "PROXIRO_TARGET_ADDR"
 )
 
 func Execute() error {
