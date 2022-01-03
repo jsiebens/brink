@@ -125,12 +125,21 @@ func TestParseRule(t *testing.T) {
 				{host: "localhost", port: 80, expectedResult: false},
 			},
 		},
-		{name: "invaid", rule: "192.1.5.10:", valid: false},
-		{name: "invaid", rule: "192.1.5.10:az", valid: false},
-		{name: "invaid", rule: "192.1.5.10:80-", valid: false},
-		{name: "invaid", rule: "192.1.5.10:-80", valid: false},
-		{name: "invaid", rule: "unknown:80", valid: false},
-		{name: "invaid", rule: "", valid: false},
+		{
+			name:  "lookup",
+			rule:  "localhost:*",
+			valid: true,
+			validations: []validation{
+				{host: "localhost", port: 80, expectedResult: true},
+				{host: "127.0.0.1", port: 80, expectedResult: true},
+			},
+		},
+		{name: "invalid", rule: "192.1.5.10:", valid: false},
+		{name: "invalid", rule: "192.1.5.10:az", valid: false},
+		{name: "invalid", rule: "192.1.5.10:80-", valid: false},
+		{name: "invalid", rule: "192.1.5.10:-80", valid: false},
+		{name: "invalid", rule: "unknown:80", valid: false},
+		{name: "invalid", rule: "", valid: false},
 	}
 
 	for _, tc := range testCases {

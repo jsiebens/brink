@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -8,11 +9,11 @@ import (
 
 type aclPolicy struct {
 	identityFilters []string
-	targetFilters   []*TargetFilter
+	targetFilters   []TargetFilter
 }
 
-func parseTargetFilters(filters []string) ([]*TargetFilter, error) {
-	var result []*TargetFilter
+func parseTargetFilters(filters []string) ([]TargetFilter, error) {
+	var result []TargetFilter
 
 	for _, f := range filters {
 		filter, err := parseTargetFilter(f)
@@ -25,12 +26,31 @@ func parseTargetFilters(filters []string) ([]*TargetFilter, error) {
 	return result, nil
 }
 
-func parseTargetFilter(rule string) (*TargetFilter, error) {
-	n := strings.SplitN(rule, ":", 2)
+func parseTargetFilter(rule string) (TargetFilter, error) {
+	n := strings.Split(rule, ":")
 
-	r := &TargetFilter{}
+	if len(n) != 2 {
+		return nil, fmt.Errorf("invalid target rule [%s]", rule)
+	}
 
-	if n[0] != "*" {
+	var portRanges []portRange
+
+	if n[1] == "*" {
+		portRanges = []portRange{{0, 65535}}
+	} else {
+		prs := strings.Split(n[1], ",")
+		for _, pr := range prs {
+			parsedPortRange, err := ParsePortRange(pr)
+			if err != nil {
+				return nil, err
+			}
+			portRanges = append(portRanges, *parsedPortRange)
+		}
+	}
+
+	if n[0] == "*" {
+		return &hostTargetFilter{n[0], portRanges}, nil
+	} else {
 		var x = n[0]
 
 		ip := net.ParseIP(n[0])
@@ -39,24 +59,12 @@ func parseTargetFilter(rule string) (*TargetFilter, error) {
 		}
 
 		_, cidr, err := net.ParseCIDR(x)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			return &cidrTargetFilter{cidr, portRanges}, nil
 		}
-		r.cidr = cidr
-	}
 
-	if n[1] != "*" {
-		portRanges := strings.Split(n[1], ",")
-		for _, pr := range portRanges {
-			parsePortRange, err := ParsePortRange(pr)
-			if err != nil {
-				return nil, err
-			}
-			r.portRanges = append(r.portRanges, *parsePortRange)
-		}
+		return &hostTargetFilter{n[0], portRanges}, nil
 	}
-
-	return r, nil
 }
 
 func ParsePortRange(ranges string) (*portRange, error) {
@@ -85,45 +93,94 @@ func ParsePortRange(ranges string) (*portRange, error) {
 	}, nil
 }
 
-type TargetFilter struct {
-	cidr       *net.IPNet
-	portRanges []portRange
+type TargetFilter interface {
+	validate(host string, port uint64) bool
+}
+
+type cidrTargetFilter struct {
+	cidr *net.IPNet
+	port portRangeFilter
+}
+
+type hostTargetFilter struct {
+	host string
+	port portRangeFilter
 }
 
 type portRange struct {
 	start, end uint64
 }
 
-func (r *TargetFilter) validate(host string, port uint64) bool {
-	if r.cidr != nil {
-		ip := net.ParseIP(host)
-		if ip == nil {
-			ips, err := net.LookupIP(host)
-			if err != nil {
-				return false
-			}
+type portRangeFilter []portRange
 
-			for _, i := range ips {
-				if !r.cidr.Contains(i) {
-					return false
-				}
-			}
-		} else {
-			if !r.cidr.Contains(ip) {
-				return false
-			}
+func (p portRangeFilter) validate(port uint64) bool {
+	for _, r := range p {
+		if r.start <= port && port <= r.end {
+			return true
 		}
 	}
+	return false
+}
 
-	if len(r.portRanges) != 0 {
-		for _, p := range r.portRanges {
-			if p.start <= port && port <= p.end {
-				return true
-			}
-		}
+func (r *hostTargetFilter) validate(target string, port uint64) bool {
+	if !r.port.validate(port) {
 		return false
 	}
 
-	// if cidr == nil && portrange empty -> allow all
-	return true
+	if r.host == "*" || r.host == target {
+		return true
+	}
+
+	allowedIPs, err := net.LookupIP(r.host)
+	if err != nil {
+		return false
+	}
+
+	targetIP := net.ParseIP(target)
+	if targetIP != nil {
+		for _, ai := range allowedIPs {
+			if ai.Equal(targetIP) {
+				return true
+			}
+		}
+	}
+
+	targetIPs, err := net.LookupIP(target)
+	if err != nil {
+		return false
+	}
+
+	for _, ai := range allowedIPs {
+		for _, ti := range targetIPs {
+			if ai.Equal(ti) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (r *cidrTargetFilter) validate(target string, port uint64) bool {
+	if !r.port.validate(port) {
+		return false
+	}
+
+	ip := net.ParseIP(target)
+	if ip != nil {
+		return r.cidr.Contains(ip)
+	}
+
+	ips, err := net.LookupIP(target)
+	if err != nil {
+		return false
+	}
+
+	for _, i := range ips {
+		if r.cidr.Contains(i) {
+			return true
+		}
+	}
+
+	return false
 }
