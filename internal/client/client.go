@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/gorilla/websocket"
@@ -66,14 +65,6 @@ func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error
 			return nil, err
 		}
 		caCertPool.AppendCertsFromPEM(caCert)
-	}
-
-	ca := fetchCa(targetBaseUrl.String())
-	if ca != nil {
-		ok := caCertPool.AppendCertsFromPEM(ca)
-		if !ok {
-			return nil, errors.New("invalid ca")
-		}
 	}
 
 	tlsConfig := &tls.Config{
@@ -219,10 +210,7 @@ func (c *Client) startAuthentication(ctx context.Context, command, url, sessionI
 	var result api.AuthenticationResponse
 	var errMsg api.MessageResponse
 
-	token, err := LoadAuthToken(c.targetBaseUrl)
-	if err != nil {
-		return nil, err
-	}
+	token, _ := LoadAuthToken(c.targetBaseUrl)
 
 	resp, err := c.httpClient.R().
 		SetHeader(proxy.AuthHeader, token).
@@ -274,25 +262,4 @@ func (c *Client) connect(ctx context.Context, id, token string, onConnect func(c
 func (c *Client) declineAll(network, address string) bool {
 	logrus.WithField("network", network).WithField("addr", address).Info("Connection declined")
 	return false
-}
-
-func fetchCa(baseUrl string) []byte {
-	tlsConfig := &tls.Config{InsecureSkipVerify: true}
-	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-
-	var errMsg api.MessageResponse
-
-	resp, err := resty.NewWithClient(client).R().
-		SetError(&errMsg).
-		Get(baseUrl + "/.well-known/ca")
-
-	if err != nil {
-		return nil
-	}
-
-	if resp.StatusCode() == http.StatusOK {
-		return resp.Body()
-	}
-
-	return nil
 }
