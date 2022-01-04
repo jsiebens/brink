@@ -8,6 +8,7 @@ import (
 	"github.com/jsiebens/proxiro/internal/proxy"
 	"github.com/jsiebens/proxiro/internal/version"
 	"github.com/labstack/echo/v4"
+	"github.com/sirupsen/logrus"
 )
 
 const authCachePrefix = "a_"
@@ -42,6 +43,7 @@ func StartServer(config *config.Config) error {
 		proxyServer.RegisterRoutes(e)
 	}
 
+	logrus.Infof("Server listening on %s", config.ListenAddr)
 	if config.Tls.KeyFile == "" {
 		return e.Start(config.ListenAddr)
 	} else {
@@ -68,6 +70,7 @@ func StartProxy(config *config.Config) error {
 	version.RegisterRoutes(e)
 	server.RegisterRoutes(e)
 
+	logrus.Infof("Proxy listening on %s", config.ListenAddr)
 	if config.Tls.KeyFile == "" {
 		return e.Start(config.ListenAddr)
 	} else {
