@@ -7,6 +7,7 @@ require (
 	github.com/go-redis/cache/v8 v8.4.3
 	github.com/go-redis/redis/v8 v8.11.4
 	github.com/go-resty/resty/v2 v2.7.0
+	github.com/gobwas/glob v0.2.3
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/go-bexpr v0.1.11
 	github.com/hashicorp/go-multierror v1.1.1

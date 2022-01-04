@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"fmt"
+	"github.com/gobwas/glob"
 	"net"
 	"strconv"
 	"strings"
@@ -49,7 +50,7 @@ func parseTargetFilter(rule string) (TargetFilter, error) {
 	}
 
 	if n[0] == "*" {
-		return &hostTargetFilter{n[0], portRanges}, nil
+		return &hostTargetFilter{n[0], nil, portRanges}, nil
 	} else {
 		var x = n[0]
 
@@ -63,7 +64,12 @@ func parseTargetFilter(rule string) (TargetFilter, error) {
 			return &cidrTargetFilter{cidr, portRanges}, nil
 		}
 
-		return &hostTargetFilter{n[0], portRanges}, nil
+		compile, err := glob.Compile(n[0], '.')
+		if err == nil {
+			return &hostTargetFilter{n[0], compile, portRanges}, nil
+		}
+
+		return &hostTargetFilter{n[0], nil, portRanges}, nil
 	}
 }
 
@@ -103,8 +109,9 @@ type cidrTargetFilter struct {
 }
 
 type hostTargetFilter struct {
-	host string
-	port portRangeFilter
+	host    string
+	pattern glob.Glob
+	port    portRangeFilter
 }
 
 type portRange struct {
@@ -128,6 +135,10 @@ func (r *hostTargetFilter) validate(target string, port uint64) bool {
 	}
 
 	if r.host == "*" || r.host == target {
+		return true
+	}
+
+	if r.pattern != nil && r.pattern.Match(target) {
 		return true
 	}
 

@@ -134,6 +134,16 @@ func TestParseRule(t *testing.T) {
 				{host: "127.0.0.1", port: 80, expectedResult: true},
 			},
 		},
+		{
+			name:  "globs",
+			rule:  "*.localtest.me:*",
+			valid: true,
+			validations: []validation{
+				//{host: "localhost", port: 80, expectedResult: false},
+				//{host: "127.0.0.1", port: 80, expectedResult: false},
+				{host: "api.localtest.me", port: 80, expectedResult: true},
+			},
+		},
 		{name: "invalid", rule: "192.1.5.10:", valid: false},
 		{name: "invalid", rule: "192.1.5.10:az", valid: false},
 		{name: "invalid", rule: "192.1.5.10:80-", valid: false},
