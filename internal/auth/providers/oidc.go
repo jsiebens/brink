@@ -3,26 +3,24 @@ package providers
 import (
 	"context"
 	"fmt"
+	"github.com/jsiebens/proxiro/internal/config"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
 
-type OIDCAuthConfig struct {
-	Issuer       string
-	ClientID     string
-	ClientSecret string
-}
+var defaultScopes = []string{oidc.ScopeOpenID, "email", "profile"}
 
 type OIDCProvider struct {
 	clientID     string
 	clientSecret string
+	scopes       []string
 	provider     *oidc.Provider
 	verifier     *oidc.IDTokenVerifier
 }
 
-func NewOIDCProvider(c *OIDCAuthConfig) (*OIDCProvider, error) {
+func NewOIDCProvider(c *config.Oidc) (*OIDCProvider, error) {
 	provider, err := oidc.NewProvider(context.Background(), c.Issuer)
 	if err != nil {
 		return nil, err
@@ -33,6 +31,7 @@ func NewOIDCProvider(c *OIDCAuthConfig) (*OIDCProvider, error) {
 	return &OIDCProvider{
 		clientID:     c.ClientID,
 		clientSecret: c.ClientSecret,
+		scopes:       append(defaultScopes, c.Scopes...),
 		provider:     provider,
 		verifier:     verifier,
 	}, nil
@@ -44,7 +43,7 @@ func (p *OIDCProvider) GetLoginURL(redirectURI, state string) string {
 		ClientSecret: p.clientSecret,
 		RedirectURL:  redirectURI,
 		Endpoint:     p.provider.Endpoint(),
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+		Scopes:       p.scopes,
 	}
 
 	return oauth2Config.AuthCodeURL(state)
@@ -56,7 +55,7 @@ func (p *OIDCProvider) Exchange(redirectURI, code string) (*Identity, error) {
 		ClientSecret: p.clientSecret,
 		RedirectURL:  redirectURI,
 		Endpoint:     p.provider.Endpoint(),
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+		Scopes:       p.scopes,
 	}
 
 	oauth2Token, err := oauth2Config.Exchange(context.Background(), code)

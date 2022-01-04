@@ -24,13 +24,7 @@ func NewServer(config *config.Config, cache cache.Cache) (*Server, error) {
 		return nil, err
 	}
 
-	oidc := &providers.OIDCAuthConfig{
-		Issuer:       config.Oidc.Issuer,
-		ClientID:     config.Oidc.ClientID,
-		ClientSecret: config.Oidc.ClientSecret,
-	}
-
-	provider, err := providers.NewOIDCProvider(oidc)
+	provider, err := providers.NewOIDCProvider(&config.Oidc)
 	if err != nil {
 		return nil, err
 	}

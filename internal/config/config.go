@@ -62,9 +62,10 @@ type Tls struct {
 }
 
 type Oidc struct {
-	Issuer       string `mapstructure:"issuer"`
-	ClientID     string `mapstructure:"client_id"`
-	ClientSecret string `mapstructure:"client_secret"`
+	Issuer       string   `mapstructure:"issuer"`
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	Scopes       []string `mapstructure:"scopes"`
 }
 
 type ACLPolicy struct {
