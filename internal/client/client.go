@@ -54,15 +54,14 @@ func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error
 		return nil, err
 	}
 
-	caCertPool, err = x509.SystemCertPool()
-	if err != nil {
-		caCertPool = x509.NewCertPool()
-	}
-
 	if caFile != "" {
 		caCert, err := ioutil.ReadFile(caFile)
 		if err != nil {
 			return nil, err
+		}
+		caCertPool, err = x509.SystemCertPool()
+		if err != nil {
+			caCertPool = x509.NewCertPool()
 		}
 		caCertPool.AppendCertsFromPEM(caCert)
 	}
