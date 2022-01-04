@@ -117,7 +117,10 @@ func (c *Client) authenticate(ctx context.Context) error {
 		err = util.OpenURL(authenticate.AuthUrl)
 		if err != nil {
 			fmt.Println()
-			fmt.Println(authenticate.AuthUrl)
+			fmt.Println("To authenticate, visit:")
+			fmt.Println()
+			fmt.Printf("  %s", authenticate.AuthUrl)
+			fmt.Println()
 			fmt.Println()
 		}
 
@@ -125,6 +128,7 @@ func (c *Client) authenticate(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println("Success.")
 	} else {
 		authToken = authenticate.AuthToken
 	}
@@ -156,7 +160,10 @@ func (c *Client) start(ctx context.Context) error {
 		err = util.OpenURL(authenticate.AuthUrl)
 		if err != nil {
 			fmt.Println()
-			fmt.Println(authenticate.AuthUrl)
+			fmt.Println("To authenticate, visit:")
+			fmt.Println()
+			fmt.Printf("  %s", authenticate.AuthUrl)
+			fmt.Println()
 			fmt.Println()
 		}
 
