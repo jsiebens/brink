@@ -100,7 +100,7 @@ func NewServer(config *config.Config, cache cache.Cache, registrar api.SessionRe
 		sessionRegistrar: registrar,
 		sessions:         cache,
 		aclPolicy: aclPolicy{
-			identityFilters: config.ACLPolicy.Identity,
+			identityFilters: config.ACLPolicy.Filters,
 			targetFilters:   targetFilters,
 		},
 		checksum: checksum,

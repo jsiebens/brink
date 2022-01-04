@@ -65,12 +65,12 @@ type Oidc struct {
 	Issuer       string   `mapstructure:"issuer"`
 	ClientID     string   `mapstructure:"client_id"`
 	ClientSecret string   `mapstructure:"client_secret"`
-	Scopes       []string `mapstructure:"scopes"`
+	Scopes       []string `mapstructure:"additional_scopes"`
 }
 
 type ACLPolicy struct {
-	Identity []string `mapstructure:"identities"`
-	Targets  []string `mapstructure:"targets"`
+	Filters []string `mapstructure:"filters"`
+	Targets []string `mapstructure:"targets"`
 }
 
 type Cache struct {
