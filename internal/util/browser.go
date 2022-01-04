@@ -2,12 +2,11 @@ package util
 
 import (
 	"fmt"
+	"github.com/hashicorp/go-multierror"
 	"io/ioutil"
 	"os/exec"
 	"runtime"
 	"strings"
-
-	"github.com/hashicorp/go-multierror"
 )
 
 // IsWSL tests if the binary is being run in Windows Subsystem for Linux

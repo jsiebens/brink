@@ -66,6 +66,7 @@ func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.GET("/a/key", s.key)
 	e.POST("/a/session", s.registerSession)
 	e.POST("/a/auth", s.auth)
+	e.GET("/a/:id", s.login)
 	e.GET("/a/callback", s.callbackOAuth)
 	e.GET("/a/success", s.success)
 	e.GET("/a/unauthorized", s.unauthorized)
@@ -111,6 +112,30 @@ func (s *Server) registerSession(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, &response)
+}
+
+func (s *Server) login(c echo.Context) error {
+	sessionId := c.Param("id")
+	se := session{}
+
+	ok, err := s.sessions.Get(sessionId, &se)
+
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid session id")
+	}
+
+	state, err := s.createOAuthState(sessionId, se.Key)
+	if err != nil {
+		return err
+	}
+
+	authUrl := s.provider.GetLoginURL(s.createUrl("/a/callback"), state)
+
+	return c.Redirect(http.StatusFound, authUrl)
 }
 
 func (s *Server) auth(c echo.Context) error {
@@ -163,15 +188,8 @@ func (s *Server) auth(c echo.Context) error {
 			}
 		}
 
-		state, err := s.createOAuthState(req.SessionId, se.Key)
-		if err != nil {
-			return err
-		}
-
-		authUrl := s.provider.GetLoginURL(s.createUrl("/a/callback"), state)
-
 		response := api.AuthenticationResponse{
-			AuthUrl: authUrl,
+			AuthUrl: s.createUrl("/a/%s", req.SessionId),
 		}
 
 		return c.JSON(http.StatusOK, &response)
