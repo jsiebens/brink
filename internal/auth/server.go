@@ -65,7 +65,7 @@ type oauthState struct {
 func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.GET("/a/key", s.key)
 	e.POST("/a/session", s.registerSession)
-	e.POST("/a/auth", s.auth)
+	e.POST("/a/auth", s.authSession)
 	e.GET("/a/:id", s.login)
 	e.GET("/a/callback", s.callbackOAuth)
 	e.GET("/a/success", s.success)
@@ -83,11 +83,76 @@ func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionR
 	}
 
 	response := api.SessionResponse{
-		SessionId:      req.SessionId,
-		SessionAuthUrl: s.createUrl("/a/auth"),
+		SessionId: req.SessionId,
 	}
 
 	return &response, nil
+}
+
+func (s *Server) AuthenticateSession(authToken string, req *api.AuthenticationRequest) (*api.AuthenticationResponse, error) {
+	se := session{}
+
+	ok, err := s.sessions.Get(req.SessionId, &se)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !ok {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid session id")
+	}
+
+	switch req.Command {
+	case "start":
+		if authToken != "" {
+			var u = &api.UserToken{}
+			err := util.OpenBase58(authToken, u, s.publicKey, s.privateKey)
+
+			now := time.Now().UTC()
+
+			if err == nil && now.Before(u.ExpirationTime) && u.Checksum == se.Checksum {
+				publicKey, err := util.ParseKey(se.Key)
+				if err != nil {
+					return nil, err
+				}
+
+				u.ExpirationTime = now.Add(5 * time.Minute).UTC()
+				sessionToken, err := util.SealBase58(u, publicKey, s.privateKey)
+				if err != nil {
+					return nil, err
+				}
+
+				_ = s.sessions.Delete(req.SessionId)
+				return &api.AuthenticationResponse{
+					AuthToken:    authToken,
+					SessionToken: sessionToken,
+				}, nil
+			}
+		}
+
+		response := api.AuthenticationResponse{
+			AuthUrl: s.createUrl("/a/%s", req.SessionId),
+		}
+
+		return &response, nil
+	case "token":
+		if se.Error != "" {
+			_ = s.sessions.Delete(req.SessionId)
+			return nil, echo.NewHTTPError(http.StatusUnauthorized, se.Error)
+		}
+
+		if se.SessionToken != "" {
+			_ = s.sessions.Delete(req.SessionId)
+			return &api.AuthenticationResponse{
+				AuthToken:    se.AuthToken,
+				SessionToken: se.SessionToken,
+			}, nil
+		}
+
+		return &api.AuthenticationResponse{}, nil
+	}
+
+	return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 }
 
 func (s *Server) key(c echo.Context) error {
@@ -102,16 +167,26 @@ func (s *Server) registerSession(c echo.Context) error {
 		return err
 	}
 
-	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Filters: req.Filters, Checksum: req.Checksum}); err != nil {
+	response, err := s.RegisterSession(&req)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, &response)
+}
+
+func (s *Server) authSession(c echo.Context) error {
+	req := api.AuthenticationRequest{}
+
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
 
-	response := api.SessionResponse{
-		SessionId:      req.SessionId,
-		SessionAuthUrl: s.createUrl("/a/auth"),
+	response, err := s.AuthenticateSession(c.Request().Header.Get(proxy.AuthHeader), &req)
+	if err != nil {
+		return err
 	}
 
-	return c.JSON(http.StatusOK, &response)
+	return c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) login(c echo.Context) error {
@@ -136,81 +211,6 @@ func (s *Server) login(c echo.Context) error {
 	authUrl := s.provider.GetLoginURL(s.createUrl("/a/callback"), state)
 
 	return c.Redirect(http.StatusFound, authUrl)
-}
-
-func (s *Server) auth(c echo.Context) error {
-	req := api.AuthenticationRequest{}
-
-	if err := c.Bind(&req); err != nil {
-		return err
-	}
-
-	se := session{}
-
-	ok, err := s.sessions.Get(req.SessionId, &se)
-
-	if err != nil {
-		return err
-	}
-
-	if !ok {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid session id")
-	}
-
-	switch req.Command {
-	case "start":
-
-		authToken := c.Request().Header.Get(proxy.AuthHeader)
-
-		if authToken != "" {
-			var u = &api.UserToken{}
-			err := util.OpenBase58(authToken, u, s.publicKey, s.privateKey)
-
-			now := time.Now().UTC()
-
-			if err == nil && now.Before(u.ExpirationTime) && u.Checksum == se.Checksum {
-				publicKey, err := util.ParseKey(se.Key)
-				if err != nil {
-					return err
-				}
-
-				u.ExpirationTime = now.Add(5 * time.Minute).UTC()
-				sessionToken, err := util.SealBase58(u, publicKey, s.privateKey)
-				if err != nil {
-					return err
-				}
-
-				_ = s.sessions.Delete(req.SessionId)
-				return c.JSON(http.StatusOK, &api.AuthenticationResponse{
-					AuthToken:    authToken,
-					SessionToken: sessionToken,
-				})
-			}
-		}
-
-		response := api.AuthenticationResponse{
-			AuthUrl: s.createUrl("/a/%s", req.SessionId),
-		}
-
-		return c.JSON(http.StatusOK, &response)
-	case "token":
-		if se.Error != "" {
-			_ = s.sessions.Delete(req.SessionId)
-			return echo.NewHTTPError(http.StatusUnauthorized, se.Error)
-		}
-
-		if se.SessionToken != "" {
-			_ = s.sessions.Delete(req.SessionId)
-			return c.JSON(http.StatusOK, &api.AuthenticationResponse{
-				AuthToken:    se.AuthToken,
-				SessionToken: se.SessionToken,
-			})
-		}
-
-		return c.JSON(http.StatusOK, &api.AuthenticationResponse{})
-	}
-
-	return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
 }
 
 func (s *Server) callbackOAuth(c echo.Context) error {

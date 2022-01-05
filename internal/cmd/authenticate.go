@@ -47,7 +47,7 @@ func logoutCommand() *cobra.Command {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}
 
-		url, err := util.NormalizeAuthServerUrl(proxyAddr)
+		url, err := util.NormalizeHttpUrl(proxyAddr)
 		if err != nil {
 			return err
 		}

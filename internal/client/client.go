@@ -44,12 +44,12 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error) {
 	var caCertPool *x509.CertPool
 
-	targetBaseUrl, err := util.NormalizeAuthServerUrl(proxy)
+	targetBaseUrl, err := util.NormalizeHttpUrl(proxy)
 	if err != nil {
 		return nil, err
 	}
 
-	connectUrl, err := util.NormalizeConnectUrl(proxy)
+	websocketBaseUrl, err := util.NormalizeWsUrl(proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -80,32 +80,32 @@ func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error
 	}
 
 	c := &Client{
-		httpClient:    resty.NewWithClient(client),
-		dialer:        dialer,
-		targetBaseUrl: targetBaseUrl.String(),
-		connectUrl:    connectUrl.String(),
+		httpClient:       resty.NewWithClient(client),
+		dialer:           dialer,
+		httpBaseUrl:      targetBaseUrl.String(),
+		websocketBaseUrl: websocketBaseUrl.String(),
 	}
 
 	return c, nil
 }
 
 type Client struct {
-	httpClient    *resty.Client
-	dialer        *websocket.Dialer
-	forwarder     *Forwarder
-	targetBaseUrl string
-	connectUrl    string
+	httpClient       *resty.Client
+	dialer           *websocket.Dialer
+	forwarder        *Forwarder
+	httpBaseUrl      string
+	websocketBaseUrl string
 }
 
 func (c *Client) authenticate(ctx context.Context) error {
-	_ = DeleteAuthToken(c.targetBaseUrl)
+	_ = DeleteAuthToken(c.httpBaseUrl)
 
 	sn, err := c.createSession(ctx)
 	if err != nil {
 		return err
 	}
 
-	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionAuthUrl, sn.SessionId)
+	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionId)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (c *Client) authenticate(ctx context.Context) error {
 			fmt.Println()
 		}
 
-		authToken, _, err = c.pollSessionToken(ctx, sn.SessionAuthUrl, sn.SessionId)
+		authToken, _, err = c.pollSessionToken(ctx, sn.SessionId)
 		if err != nil {
 			return err
 		}
@@ -132,7 +132,7 @@ func (c *Client) authenticate(ctx context.Context) error {
 		authToken = authenticate.AuthToken
 	}
 
-	_ = StoreAuthToken(c.targetBaseUrl, authToken)
+	_ = StoreAuthToken(c.httpBaseUrl, authToken)
 
 	return nil
 }
@@ -147,7 +147,7 @@ func (c *Client) start(ctx context.Context) error {
 		return err
 	}
 
-	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionAuthUrl, sn.SessionId)
+	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionId)
 	if err != nil {
 		return err
 	}
@@ -166,7 +166,7 @@ func (c *Client) start(ctx context.Context) error {
 			fmt.Println()
 		}
 
-		authToken, sessionToken, err = c.pollSessionToken(ctx, sn.SessionAuthUrl, sn.SessionId)
+		authToken, sessionToken, err = c.pollSessionToken(ctx, sn.SessionId)
 		if err != nil {
 			return err
 		}
@@ -175,7 +175,7 @@ func (c *Client) start(ctx context.Context) error {
 		sessionToken = authenticate.SessionToken
 	}
 
-	_ = StoreAuthToken(c.targetBaseUrl, authToken)
+	_ = StoreAuthToken(c.httpBaseUrl, authToken)
 
 	if err := c.connect(ctx, sn.SessionId, sessionToken, c.forwarder.OnTunnelConnect); err != nil {
 		return err
@@ -199,7 +199,7 @@ func (c *Client) createSession(ctx context.Context) (*api.SessionResponse, error
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).
-		Post(c.targetBaseUrl + "/p/session")
+		Post(c.httpBaseUrl + "/p/session")
 
 	if err != nil {
 		return nil, err
@@ -212,11 +212,11 @@ func (c *Client) createSession(ctx context.Context) (*api.SessionResponse, error
 	return &result, nil
 }
 
-func (c *Client) startAuthentication(ctx context.Context, command, url, sessionId string) (*api.AuthenticationResponse, error) {
+func (c *Client) startAuthentication(ctx context.Context, command, sessionId string) (*api.AuthenticationResponse, error) {
 	var result api.AuthenticationResponse
 	var errMsg api.MessageResponse
 
-	token, _ := LoadAuthToken(c.targetBaseUrl)
+	token, _ := LoadAuthToken(c.httpBaseUrl)
 
 	resp, err := c.httpClient.R().
 		SetHeader(proxy.AuthHeader, token).
@@ -224,7 +224,7 @@ func (c *Client) startAuthentication(ctx context.Context, command, url, sessionI
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).
-		Post(url)
+		Post(c.httpBaseUrl + "/p/auth")
 
 	if err != nil {
 		return nil, err
@@ -237,13 +237,13 @@ func (c *Client) startAuthentication(ctx context.Context, command, url, sessionI
 	return &result, nil
 }
 
-func (c *Client) pollSessionToken(ctx context.Context, url, sessionId string) (string, string, error) {
+func (c *Client) pollSessionToken(ctx context.Context, sessionId string) (string, string, error) {
 	for {
 		select {
 		case <-ctx.Done():
 			return "", "", ctx.Err()
 		case <-time.After(1500 * time.Millisecond):
-			resp, err := c.startAuthentication(ctx, "token", url, sessionId)
+			resp, err := c.startAuthentication(ctx, "token", sessionId)
 			if err != nil {
 				return "", "", err
 			}
@@ -262,7 +262,7 @@ func (c *Client) connect(ctx context.Context, id, token string, onConnect func(c
 	headers.Add(proxy.IdHeader, id)
 	headers.Add(proxy.AuthHeader, token)
 
-	return remotedialer.ClientConnect(ctx, c.connectUrl+"/p/connect", headers, c.dialer, c.declineAll, onConnect)
+	return remotedialer.ClientConnect(ctx, c.websocketBaseUrl+"/p/connect", headers, c.dialer, c.declineAll, onConnect)
 }
 
 func (c *Client) declineAll(network, address string) bool {

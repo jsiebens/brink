@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -25,57 +24,9 @@ const (
 	AuthHeader = "x-proxiro-auth"
 )
 
-type remoteSessionRegistrar struct {
-	client            *resty.Client
-	authServerBaseUrl string
-}
-
-func (r *remoteSessionRegistrar) GetPublicKey() (*[32]byte, error) {
-	var result api.KeyResponse
-	var errMsg api.MessageResponse
-
-	resp, err := r.client.R().
-		SetResult(&result).
-		SetError(&errMsg).
-		SetContext(context.Background()).
-		Get(r.authServerBaseUrl + "/a/key")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
-	}
-
-	return util.ParseKey(result.Key)
-}
-
-func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionResponse, error) {
-	var result api.SessionResponse
-	var errMsg api.MessageResponse
-
-	resp, err := r.client.R().
-		SetBody(req).
-		SetResult(&result).
-		SetError(&errMsg).
-		SetContext(context.Background()).
-		Post(r.authServerBaseUrl + "/a/session")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
-	}
-
-	return &result, nil
-}
-
-func NewServer(config *config.Config, cache cache.Cache, registrar api.SessionRegistrar) (*Server, error) {
+func NewServer(config *config.Config, cache cache.Cache, registrar SessionRegistrar) (*Server, error) {
 	if registrar == nil {
-		url, err := util.NormalizeAuthServerUrl(config.AuthServer)
+		url, err := util.NormalizeHttpUrl(config.AuthServer)
 		if err != nil {
 			return nil, err
 		}
@@ -110,7 +61,7 @@ func NewServer(config *config.Config, cache cache.Cache, registrar api.SessionRe
 }
 
 type Server struct {
-	sessionRegistrar api.SessionRegistrar
+	sessionRegistrar SessionRegistrar
 	sessions         cache.Cache
 	aclPolicy        aclPolicy
 	checksum         string
@@ -124,6 +75,7 @@ type session struct {
 func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.Any("/p/connect", s.proxy())
 	e.POST("/p/session", s.createSession)
+	e.POST("/p/auth", s.authSession)
 }
 
 func (s *Server) createSession(c echo.Context) error {
@@ -156,6 +108,21 @@ func (s *Server) createSession(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, &resp)
+}
+
+func (s *Server) authSession(c echo.Context) error {
+	req := api.AuthenticationRequest{}
+
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+
+	response, err := s.sessionRegistrar.AuthenticateSession(c.Request().Header.Get(AuthHeader), &req)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) proxy() echo.HandlerFunc {

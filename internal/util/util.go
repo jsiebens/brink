@@ -14,7 +14,7 @@ import (
 	"net/url"
 )
 
-func NormalizeConnectUrl(input string) (*url.URL, error) {
+func NormalizeWsUrl(input string) (*url.URL, error) {
 
 	normalizeUrl := func(u *url.URL) (*url.URL, error) {
 		switch u.Scheme {
@@ -42,7 +42,7 @@ func NormalizeConnectUrl(input string) (*url.URL, error) {
 	return nil, fmt.Errorf("invalid target")
 }
 
-func NormalizeAuthServerUrl(input string) (*url.URL, error) {
+func NormalizeHttpUrl(input string) (*url.URL, error) {
 
 	normalizeUrl := func(u *url.URL) (*url.URL, error) {
 		switch u.Scheme {

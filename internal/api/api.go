@@ -25,8 +25,7 @@ type RegisterSessionRequest struct {
 }
 
 type SessionResponse struct {
-	SessionId      string `json:"session_id"`
-	SessionAuthUrl string `json:"session_auth_url"`
+	SessionId string `json:"session_id"`
 }
 
 type MessageResponse struct {
@@ -45,7 +44,3 @@ type UserToken struct {
 	Checksum       string    `json:"cs"`
 }
 
-type SessionRegistrar interface {
-	GetPublicKey() (*[32]byte, error)
-	RegisterSession(request *RegisterSessionRequest) (*SessionResponse, error)
-}
