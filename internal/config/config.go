@@ -13,7 +13,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	v := enviper.New(viper.New())
-	v.SetEnvPrefix("proxiro")
+	v.SetEnvPrefix("brink")
 	v.AutomaticEnv()
 
 	if len(path) != 0 {

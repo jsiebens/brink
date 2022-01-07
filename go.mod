@@ -1,4 +1,4 @@
-module github.com/jsiebens/proxiro
+module github.com/jsiebens/brink
 
 go 1.17
 

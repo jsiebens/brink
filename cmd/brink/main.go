@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/jsiebens/proxiro/internal/cmd"
+	"github.com/jsiebens/brink/internal/cmd"
 	"os"
 )
 

@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/jsiebens/proxiro/internal/client"
-	"github.com/jsiebens/proxiro/internal/util"
+	"github.com/jsiebens/brink/internal/client"
+	"github.com/jsiebens/brink/internal/util"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"io/ioutil"
@@ -12,7 +12,7 @@ import (
 func authenticateCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "authenticate",
-		Short:        "Authenticate the Proxiro Client for a specific Proxy.",
+		Short:        "Authenticate the Brink Client for a specific Proxy.",
 		SilenceUsage: true,
 	}
 
@@ -21,7 +21,7 @@ func authenticateCommand() *cobra.Command {
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		logrus.SetOutput(ioutil.Discard)
 
-		proxyAddr := getString(ProxiroProxyAddr, proxyAddrFlag)
+		proxyAddr := getString(BrinkProxyAddr, proxyAddrFlag)
 		if proxyAddr == "" {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}
@@ -42,7 +42,7 @@ func logoutCommand() *cobra.Command {
 	registerProxyFlags(command)
 
 	command.RunE = func(cmd *cobra.Command, args []string) error {
-		proxyAddr := getString(ProxiroProxyAddr, proxyAddrFlag)
+		proxyAddr := getString(BrinkProxyAddr, proxyAddrFlag)
 		if proxyAddr == "" {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}

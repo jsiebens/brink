@@ -6,13 +6,13 @@ import (
 )
 
 const (
-	ProxiroProxyAddr  = "PROXIRO_PROXY_ADDR"
-	ProxiroTargetAddr = "PROXIRO_TARGET_ADDR"
+	BrinkProxyAddr  = "BRINK_PROXY_ADDR"
+	BrinkTargetAddr = "BRINK_TARGET_ADDR"
 )
 
 func Execute() error {
 	rootCmd := &cobra.Command{
-		Use: "proxiro",
+		Use: "brink",
 	}
 
 	rootCmd.AddCommand(serverCommand())

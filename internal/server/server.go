@@ -1,12 +1,12 @@
 package server
 
 import (
-	"github.com/jsiebens/proxiro/internal/auth"
-	"github.com/jsiebens/proxiro/internal/auth/templates"
-	"github.com/jsiebens/proxiro/internal/cache"
-	"github.com/jsiebens/proxiro/internal/config"
-	"github.com/jsiebens/proxiro/internal/proxy"
-	"github.com/jsiebens/proxiro/internal/version"
+	"github.com/jsiebens/brink/internal/auth"
+	"github.com/jsiebens/brink/internal/auth/templates"
+	"github.com/jsiebens/brink/internal/cache"
+	"github.com/jsiebens/brink/internal/config"
+	"github.com/jsiebens/brink/internal/proxy"
+	"github.com/jsiebens/brink/internal/version"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 )

@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/jsiebens/proxiro/internal/config"
-	"github.com/jsiebens/proxiro/internal/server"
+	"github.com/jsiebens/brink/internal/config"
+	"github.com/jsiebens/brink/internal/server"
 	"github.com/spf13/cobra"
 )
 

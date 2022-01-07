@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-resty/resty/v2"
-	"github.com/jsiebens/proxiro/internal/api"
-	"github.com/jsiebens/proxiro/internal/util"
+	"github.com/jsiebens/brink/internal/api"
+	"github.com/jsiebens/brink/internal/util"
 	"github.com/labstack/echo/v4"
 	"net/http"
 )

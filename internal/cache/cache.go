@@ -2,7 +2,7 @@ package cache
 
 import (
 	"fmt"
-	"github.com/jsiebens/proxiro/internal/config"
+	"github.com/jsiebens/brink/internal/config"
 	"time"
 )
 

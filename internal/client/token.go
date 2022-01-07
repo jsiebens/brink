@@ -7,7 +7,7 @@ import (
 )
 
 func LoadAuthToken(proxy string) (string, error) {
-	token, err := keyring.Get(fmt.Sprintf("proxiro - %s", proxy), "default")
+	token, err := keyring.Get(fmt.Sprintf("brink - %s", proxy), "default")
 	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
 		return "", err
 	}
@@ -15,9 +15,9 @@ func LoadAuthToken(proxy string) (string, error) {
 }
 
 func StoreAuthToken(proxy, token string) error {
-	return keyring.Set(fmt.Sprintf("proxiro - %s", proxy), "default", token)
+	return keyring.Set(fmt.Sprintf("brink - %s", proxy), "default", token)
 }
 
 func DeleteAuthToken(proxy string) error {
-	return keyring.Delete(fmt.Sprintf("proxiro - %s", proxy), "default")
+	return keyring.Delete(fmt.Sprintf("brink - %s", proxy), "default")
 }

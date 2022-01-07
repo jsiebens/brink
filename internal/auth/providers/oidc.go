@@ -3,7 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
-	"github.com/jsiebens/proxiro/internal/config"
+	"github.com/jsiebens/brink/internal/config"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"

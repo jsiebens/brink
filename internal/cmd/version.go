@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/jsiebens/proxiro/internal/version"
+	"github.com/jsiebens/brink/internal/version"
 	"github.com/spf13/cobra"
 )
 

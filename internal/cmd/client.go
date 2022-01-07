@@ -3,7 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/jsiebens/proxiro/internal/client"
+	"github.com/jsiebens/brink/internal/client"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/execabs"
@@ -20,7 +20,7 @@ var (
 )
 
 func registerProxyFlags(command *cobra.Command) {
-	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", fmt.Sprintf("Addr of the Proxiro proxy. This can also be specified via the environment variable %s.", ProxiroProxyAddr))
+	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", fmt.Sprintf("Addr of the Brink proxy. This can also be specified via the environment variable %s.", BrinkProxyAddr))
 	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "Disable verification of TLS certificates, highly discouraged as it decreases the security of data transmissions.")
 	command.Flags().StringVar(&caFile, "ca-file", "", "Path on the local disk to a single PEM-encoded CA certificate to verify the proxy or server SSL certificate.")
 }
@@ -49,12 +49,12 @@ func connectCommand() *cobra.Command {
 
 		logrus.SetOutput(ioutil.Discard)
 
-		proxyAddr := getString(ProxiroProxyAddr, proxyAddrFlag)
+		proxyAddr := getString(BrinkProxyAddr, proxyAddrFlag)
 		if proxyAddr == "" {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}
 
-		targetAddr := getString(ProxiroTargetAddr, targetAddrFlag)
+		targetAddr := getString(BrinkTargetAddr, targetAddrFlag)
 		if targetAddr == "" {
 			return fmt.Errorf("required flag --target-addr is missing")
 		}
@@ -108,12 +108,12 @@ func sshCommand() *cobra.Command {
 
 		logrus.SetOutput(ioutil.Discard)
 
-		proxyAddr := getString(ProxiroProxyAddr, proxyAddrFlag)
+		proxyAddr := getString(BrinkProxyAddr, proxyAddrFlag)
 		if proxyAddr == "" {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}
 
-		targetAddr := getString(ProxiroTargetAddr, targetAddrFlag)
+		targetAddr := getString(BrinkTargetAddr, targetAddrFlag)
 		if targetAddr == "" {
 			return fmt.Errorf("required flag --target-addr is missing")
 		}
@@ -151,10 +151,10 @@ func execOnConnect(cmd string, buildArgs func(addr string, ip string, port strin
 
 		stringReplacer := func(in, typ, replacer string) string {
 			for _, style := range []string{
-				fmt.Sprintf("{{proxiro.%s}}", typ),
-				fmt.Sprintf("{{ proxiro.%s}}", typ),
-				fmt.Sprintf("{{proxiro.%s }}", typ),
-				fmt.Sprintf("{{ proxiro.%s }}", typ),
+				fmt.Sprintf("{{brink.%s}}", typ),
+				fmt.Sprintf("{{ brink.%s}}", typ),
+				fmt.Sprintf("{{brink.%s }}", typ),
+				fmt.Sprintf("{{ brink.%s }}", typ),
 			} {
 				in = strings.Replace(in, style, replacer, -1)
 			}

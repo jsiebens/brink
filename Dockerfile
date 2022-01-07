@@ -15,16 +15,16 @@ RUN VERSION=$(git describe --all --exact-match `git rev-parse HEAD` | grep tags 
     && GIT_COMMIT=$(git rev-list -1 HEAD) \
     && GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=${CGO_ENABLED} go build \
         --ldflags "-s -w \
-        -X github.com/jsiebens/proxiro/internal/version.GitCommit=${GIT_COMMIT}\
-        -X github.com/jsiebens/proxiro/internal/version.Version=${VERSION}" \
-        -a -installsuffix cgo -o proxiro cmd/proxiro/main.go
+        -X github.com/jsiebens/brink/internal/version.GitCommit=${GIT_COMMIT}\
+        -X github.com/jsiebens/brink/internal/version.Version=${VERSION}" \
+        -a -installsuffix cgo -o brink cmd/brink/main.go
 
 FROM --platform=${TARGETPLATFORM:-linux/amd64} alpine:3.14.2 as ship
 
 RUN apk --no-cache add ca-certificates
-RUN addgroup -S proxiro && adduser -S -g proxiro proxiro
+RUN addgroup -S brink && adduser -S -g brink brink
 
-COPY --from=build /src/proxiro /usr/local/bin
+COPY --from=build /src/brink /usr/local/bin
 
-USER proxiro
-ENTRYPOINT ["proxiro"]
+USER brink
+ENTRYPOINT ["brink"]

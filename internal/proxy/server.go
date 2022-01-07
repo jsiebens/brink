@@ -5,10 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/go-resty/resty/v2"
-	"github.com/jsiebens/proxiro/internal/api"
-	"github.com/jsiebens/proxiro/internal/cache"
-	"github.com/jsiebens/proxiro/internal/config"
-	"github.com/jsiebens/proxiro/internal/util"
+	"github.com/jsiebens/brink/internal/api"
+	"github.com/jsiebens/brink/internal/cache"
+	"github.com/jsiebens/brink/internal/config"
+	"github.com/jsiebens/brink/internal/util"
 	"github.com/labstack/echo/v4"
 	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	IdHeader   = "x-proxiro-id"
-	AuthHeader = "x-proxiro-auth"
+	IdHeader   = "x-brink-id"
+	AuthHeader = "x-brink-auth"
 )
 
 func NewServer(config *config.Config, cache cache.Cache, registrar SessionRegistrar) (*Server, error) {
