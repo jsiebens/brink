@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/kelindar/binary"
 	"github.com/klauspost/compress/zstd"
 	"github.com/mr-tron/base58"
 	"golang.org/x/crypto/curve25519"
@@ -132,7 +133,7 @@ func Seal(v interface{}, publicKey, privateKey *[32]byte) ([]byte, error) {
 		panic(err)
 	}
 
-	b, err := json.Marshal(v)
+	b, err := binary.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +169,7 @@ func Open(encrypted []byte, v interface{}, publicKey, privateKey *[32]byte) erro
 		return err
 	}
 
-	if err := json.Unmarshal(decoded, v); err != nil {
+	if err := binary.Unmarshal(decoded, v); err != nil {
 		return err
 	}
 
