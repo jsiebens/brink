@@ -37,12 +37,12 @@ func NewServer(config *config.Config, cache cache.Cache, registrar SessionRegist
 		}
 	}
 
-	targetFilters, err := parseTargetFilters(config.ACLPolicy.Targets)
+	targetFilters, err := parseTargetFilters(config.Policy.Targets)
 	if err != nil {
 		return nil, err
 	}
 
-	checksum, err := util.Checksum(&config.ACLPolicy)
+	checksum, err := util.Checksum(&config.Policy)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func NewServer(config *config.Config, cache cache.Cache, registrar SessionRegist
 		sessionRegistrar: registrar,
 		sessions:         cache,
 		aclPolicy: aclPolicy{
-			identityFilters: config.ACLPolicy.Filters,
+			identityFilters: config.Policy.Filters,
 			targetFilters:   targetFilters,
 		},
 		checksum: checksum,
@@ -126,12 +126,12 @@ func (s *Server) authSession(c echo.Context) error {
 }
 
 func (s *Server) proxy() echo.HandlerFunc {
-	rd := remotedialer.New(s.authorized, remotedialer.DefaultErrorWriter)
-	rd.ClientConnectAuthorizer = s.authConnection
+	rd := remotedialer.New(s.authorizeClient, remotedialer.DefaultErrorWriter)
+	rd.ClientConnectAuthorizer = s.authorizeConnection
 	return echo.WrapHandler(rd)
 }
 
-func (s *Server) authorized(req *http.Request) (string, bool, error) {
+func (s *Server) authorizeClient(req *http.Request) (string, bool, error) {
 	id := req.Header.Get(IdHeader)
 	auth := req.Header.Get(AuthHeader)
 
@@ -173,7 +173,7 @@ func (s *Server) authorized(req *http.Request) (string, bool, error) {
 	return req.Header.Get(IdHeader), true, nil
 }
 
-func (s *Server) authConnection(network, address string) bool {
+func (s *Server) authorizeConnection(network, address string) bool {
 	result := s.validateTarget(address)
 
 	if result {

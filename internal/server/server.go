@@ -34,7 +34,7 @@ func StartServer(config *config.Config) error {
 	version.RegisterRoutes(e)
 	authServer.RegisterRoutes(e)
 
-	if len(config.ACLPolicy.Filters) != 0 && len(config.ACLPolicy.Targets) != 0 {
+	if len(config.Policy.Filters) != 0 && len(config.Policy.Targets) != 0 {
 		proxyServer, err := proxy.NewServer(config, cache.Prefixed(c, proxyCachePrefix), authServer)
 		if err != nil {
 			return err

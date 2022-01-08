@@ -38,7 +38,7 @@ func defaultConfig() *Config {
 		AuthServer: "http://localhost:7000",
 		Tls:        Tls{},
 		Oidc:       Oidc{},
-		ACLPolicy:  ACLPolicy{},
+		Policy:     Policy{},
 		Cache: Cache{
 			Type: "inmemory",
 		},
@@ -46,14 +46,14 @@ func defaultConfig() *Config {
 }
 
 type Config struct {
-	ListenAddr string    `mapstructure:"listen_addr"`
-	ServerUrl  string    `mapstructure:"server_url"`
-	AuthServer string    `mapstructure:"auth_server"`
-	Key        string    `mapstructure:"key"`
-	Cache      Cache     `mapstructure:"cache"`
-	Tls        Tls       `mapstructure:"tls"`
-	Oidc       Oidc      `mapstructure:"oidc"`
-	ACLPolicy  ACLPolicy `mapstructure:"acl_policy"`
+	ListenAddr string `mapstructure:"listen_addr"`
+	ServerUrl  string `mapstructure:"server_url"`
+	AuthServer string `mapstructure:"auth_server"`
+	Key        string `mapstructure:"key"`
+	Cache      Cache  `mapstructure:"cache"`
+	Tls        Tls    `mapstructure:"tls"`
+	Oidc       Oidc   `mapstructure:"oidc"`
+	Policy     Policy `mapstructure:"policy"`
 }
 
 type Tls struct {
@@ -68,7 +68,7 @@ type Oidc struct {
 	Scopes       []string `mapstructure:"additional_scopes"`
 }
 
-type ACLPolicy struct {
+type Policy struct {
 	Filters []string `mapstructure:"filters"`
 	Targets []string `mapstructure:"targets"`
 }
