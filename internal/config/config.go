@@ -35,7 +35,6 @@ func defaultConfig() *Config {
 	return &Config{
 		ListenAddr: ":7000",
 		ServerUrl:  "http://localhost:7000",
-		AuthServer: "http://localhost:7000",
 		Tls:        Tls{},
 		Oidc:       Oidc{},
 		Policy:     Policy{},

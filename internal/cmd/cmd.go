@@ -16,7 +16,6 @@ func Execute() error {
 	}
 
 	rootCmd.AddCommand(serverCommand())
-	rootCmd.AddCommand(proxyCommand())
 	rootCmd.AddCommand(authenticateCommand())
 	rootCmd.AddCommand(connectCommand())
 	rootCmd.AddCommand(sshCommand())
