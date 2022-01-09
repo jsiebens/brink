@@ -177,7 +177,7 @@ func (c *Client) start(ctx context.Context) error {
 
 	_ = StoreAuthToken(c.httpBaseUrl, authToken)
 
-	if err := c.connect(ctx, sn.SessionId, sessionToken, c.forwarder.OnTunnelConnect); err != nil {
+	if err := c.connect(ctx, sn.SessionId, sessionToken); err != nil {
 		return err
 	}
 
@@ -206,7 +206,7 @@ func (c *Client) createSession(ctx context.Context) (*api.SessionResponse, error
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
+		return nil, &serverError{resp.StatusCode(), errMsg.Message}
 	}
 
 	return &result, nil
@@ -231,7 +231,7 @@ func (c *Client) startAuthentication(ctx context.Context, command, sessionId str
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
+		return nil, &serverError{resp.StatusCode(), errMsg.Message}
 	}
 
 	return &result, nil
@@ -257,15 +257,67 @@ func (c *Client) pollSessionToken(ctx context.Context, sessionId string) (string
 	}
 }
 
-func (c *Client) connect(ctx context.Context, id, token string, onConnect func(context.Context, *remotedialer.Session) error) error {
+func (c *Client) connect(ctx context.Context, id, token string) error {
 	headers := http.Header{}
 	headers.Add(proxy.IdHeader, id)
 	headers.Add(proxy.AuthHeader, token)
 
-	return remotedialer.ClientConnect(ctx, c.websocketBaseUrl+"/p/connect", headers, c.dialer, c.declineAll, onConnect)
+	return c.connectToProxy(ctx, c.websocketBaseUrl+"/p/connect", headers)
+}
+
+func (c *Client) connectToProxy(rootCtx context.Context, proxyURL string, headers http.Header) error {
+	ws, resp, err := c.dialer.DialContext(rootCtx, proxyURL, headers)
+	if err != nil {
+		if resp != nil {
+			rb, err2 := ioutil.ReadAll(resp.Body)
+			if err2 != nil {
+				return &serverError{resp.StatusCode, resp.Status}
+			} else {
+				return &serverError{resp.StatusCode, string(rb)}
+			}
+		}
+		return err
+	}
+	defer ws.Close()
+
+	result := make(chan error, 2)
+
+	ctx, cancel := context.WithCancel(rootCtx)
+	defer cancel()
+
+	session := remotedialer.NewClientSession(c.declineAll, ws)
+	defer session.Close()
+
+	go func() {
+		if err := c.forwarder.OnTunnelConnect(ctx, session); err != nil {
+			result <- err
+		}
+	}()
+
+	go func() {
+		_, err = session.Serve(ctx)
+		result <- err
+	}()
+
+	select {
+	case <-ctx.Done():
+		logrus.WithField("url", proxyURL).WithField("err", ctx.Err()).Info("Proxy done")
+		return nil
+	case err := <-result:
+		return err
+	}
 }
 
 func (c *Client) declineAll(network, address string) bool {
 	logrus.WithField("network", network).WithField("addr", address).Info("Connection declined")
 	return false
+}
+
+type serverError struct {
+	code    int
+	message string
+}
+
+func (e serverError) Error() string {
+	return fmt.Sprintf("unexpected status code: %d - %s", e.code, e.message)
 }

@@ -170,7 +170,7 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, error) {
 		WithField("email", u.Email).
 		Info("Client authorized")
 
-	return req.Header.Get(IdHeader), true, nil
+	return id, true, nil
 }
 
 func (s *Server) authorizeConnection(network, address string) bool {
