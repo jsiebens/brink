@@ -18,10 +18,17 @@ type CreateSessionRequest struct {
 }
 
 type RegisterSessionRequest struct {
-	SessionId  string   `json:"session_id"`
-	SessionKey string   `json:"session_key"`
-	Filters    []string `json:"filters"`
-	Checksum   string   `json:"cs"`
+	SessionId  string `json:"session_id"`
+	SessionKey string `json:"session_key"`
+	Policy     Policy `json:"policy"`
+	Target     string `json:"target"`
+	Checksum   string `json:"cs"`
+}
+
+type Policy struct {
+	Subs    []string `json:"subs"`
+	Emails  []string `json:"emails"`
+	Filters []string `json:"filters"`
 }
 
 type SessionResponse struct {
@@ -36,7 +43,7 @@ type KeyResponse struct {
 	Key string `json:"key"`
 }
 
-type UserToken struct {
+type AuthToken struct {
 	UserID         string    `json:"user_id"`
 	Username       string    `json:"user_name"`
 	Email          string    `json:"email"`
@@ -44,3 +51,11 @@ type UserToken struct {
 	Checksum       string    `json:"cs"`
 }
 
+type SessionToken struct {
+	UserID         string    `json:"user_id"`
+	Username       string    `json:"user_name"`
+	Email          string    `json:"email"`
+	Target         string    `json:"target"`
+	ExpirationTime time.Time `json:"exp"`
+	Checksum       string    `json:"cs"`
+}

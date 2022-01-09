@@ -34,7 +34,7 @@ func StartServer(config *config.Config) error {
 	version.RegisterRoutes(e)
 	authServer.RegisterRoutes(e)
 
-	if len(config.Policy.Filters) != 0 && len(config.Policy.Targets) != 0 {
+	if enableProxy(config.Policy) {
 		proxyServer, err := proxy.NewServer(config, cache.Prefixed(c, proxyCachePrefix), authServer)
 		if err != nil {
 			return err
@@ -49,6 +49,10 @@ func StartServer(config *config.Config) error {
 	} else {
 		return e.StartTLS(config.ListenAddr, config.Tls.CertFile, config.Tls.KeyFile)
 	}
+}
+
+func enableProxy(p config.Policy) bool {
+	return (len(p.Subs) != 0 || len(p.Emails) != 0 || len(p.Filters) != 0) && len(p.Targets) != 0
 }
 
 func StartProxy(config *config.Config) error {

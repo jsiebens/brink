@@ -50,10 +50,11 @@ type Server struct {
 
 type session struct {
 	Key          string
-	Filters      []string
+	Policy       api.Policy
+	Target       string
+	Checksum     string
 	AuthToken    string
 	SessionToken string
-	Checksum     string
 	Error        string
 }
 
@@ -78,7 +79,7 @@ func (s *Server) GetPublicKey() (*[32]byte, error) {
 }
 
 func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionResponse, error) {
-	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Filters: req.Filters, Checksum: req.Checksum}); err != nil {
+	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Policy: req.Policy, Target: req.Target, Checksum: req.Checksum}); err != nil {
 		return nil, err
 	}
 
@@ -105,7 +106,7 @@ func (s *Server) AuthenticateSession(authToken string, req *api.AuthenticationRe
 	switch req.Command {
 	case "start":
 		if authToken != "" {
-			var u = &api.UserToken{}
+			var u = &api.AuthToken{}
 			err := util.OpenBase58(authToken, u, s.publicKey, s.privateKey)
 
 			now := time.Now().UTC()
@@ -116,8 +117,16 @@ func (s *Server) AuthenticateSession(authToken string, req *api.AuthenticationRe
 					return nil, err
 				}
 
-				u.ExpirationTime = now.Add(5 * time.Minute).UTC()
-				sessionToken, err := util.SealBase58(u, publicKey, s.privateKey)
+				st := api.SessionToken{
+					UserID:         u.UserID,
+					Username:       u.Username,
+					Email:          u.Email,
+					Target:         se.Target,
+					ExpirationTime: now.Add(5 * time.Minute).UTC(),
+					Checksum:       se.Checksum,
+				}
+
+				sessionToken, err := util.SealBase58(st, publicKey, s.privateKey)
 				if err != nil {
 					return nil, err
 				}
@@ -248,27 +257,35 @@ func (s *Server) callbackOAuth(c echo.Context) error {
 		return err
 	}
 
-	authorized, err := s.evaluateIdentity(se.Filters, identity)
+	authorized, err := s.evaluateIdentity(se.Policy, identity)
 	if err != nil {
 		return err
 	}
 
 	if authorized {
-		u := &api.UserToken{
-			Checksum:       se.Checksum,
+		at := &api.AuthToken{
 			UserID:         identity.UserID,
 			Username:       identity.Username,
 			Email:          identity.Email,
-			ExpirationTime: time.Now().Add(5 * time.Minute).UTC(),
+			ExpirationTime: time.Now().Add(24 * time.Hour).UTC(),
+			Checksum:       se.Checksum,
 		}
 
-		sessionToken, err := util.SealBase58(u, publicKey, s.privateKey)
+		authToken, err := util.SealBase58(at, s.publicKey, s.privateKey)
 		if err != nil {
 			return err
 		}
 
-		u.ExpirationTime = time.Now().Add(24 * time.Hour).UTC()
-		authToken, err := util.SealBase58(u, s.publicKey, s.privateKey)
+		st := &api.SessionToken{
+			UserID:         identity.UserID,
+			Username:       identity.Username,
+			Email:          identity.Email,
+			Target:         se.Target,
+			ExpirationTime: time.Now().Add(5 * time.Minute).UTC(),
+			Checksum:       se.Checksum,
+		}
+
+		sessionToken, err := util.SealBase58(st, publicKey, s.privateKey)
 		if err != nil {
 			return err
 		}
@@ -298,8 +315,20 @@ func (s *Server) callbackError(c echo.Context) error {
 	return c.Render(http.StatusOK, "error.html", nil)
 }
 
-func (s *Server) evaluateIdentity(filters []string, identity *providers.Identity) (bool, error) {
-	for _, f := range filters {
+func (s *Server) evaluateIdentity(policy api.Policy, identity *providers.Identity) (bool, error) {
+	for _, sub := range policy.Subs {
+		if identity.UserID == sub {
+			return true, nil
+		}
+	}
+
+	for _, email := range policy.Emails {
+		if identity.Email == email {
+			return true, nil
+		}
+	}
+
+	for _, f := range policy.Filters {
 		if f == "*" {
 			return true, nil
 		}

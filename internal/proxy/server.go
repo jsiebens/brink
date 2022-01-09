@@ -50,11 +50,9 @@ func NewServer(config *config.Config, cache cache.Cache, registrar SessionRegist
 	server := &Server{
 		sessionRegistrar: registrar,
 		sessions:         cache,
-		aclPolicy: aclPolicy{
-			identityFilters: config.Policy.Filters,
-			targetFilters:   targetFilters,
-		},
-		checksum: checksum,
+		policy:           config.Policy,
+		targetFilters:    targetFilters,
+		checksum:         checksum,
 	}
 
 	return server, nil
@@ -63,7 +61,8 @@ func NewServer(config *config.Config, cache cache.Cache, registrar SessionRegist
 type Server struct {
 	sessionRegistrar SessionRegistrar
 	sessions         cache.Cache
-	aclPolicy        aclPolicy
+	policy           config.Policy
+	targetFilters    []TargetFilter
 	checksum         string
 }
 
@@ -85,8 +84,10 @@ func (s *Server) createSession(c echo.Context) error {
 		return err
 	}
 
-	if req.Target != "" && !s.validateTarget(req.Target) {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Target [%s] is blocked by the proxy", req.Target))
+	target := req.Target
+
+	if target != "" && !s.validateTarget(target) {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("access to target [%s] is denied", target))
 	}
 
 	publicKey, privateKey, err := box.GenerateKey(rand.Reader)
@@ -96,13 +97,13 @@ func (s *Server) createSession(c echo.Context) error {
 
 	sessionId := util.GenerateSessionId()
 
-	if req.Target != "" {
+	if target != "" {
 		if err := s.sessions.Set(sessionId, &session{PublicKey: publicKey, PrivateKey: privateKey}); err != nil {
 			return err
 		}
 	}
 
-	resp, err := s.registerSession(sessionId, hex.EncodeToString(publicKey[:]))
+	resp, err := s.registerSession(sessionId, hex.EncodeToString(publicKey[:]), target)
 	if err != nil {
 		return err
 	}
@@ -153,7 +154,7 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, error) {
 		return "", false, err
 	}
 
-	var u = &api.UserToken{}
+	var u = &api.SessionToken{}
 	if err := util.OpenBase58(auth, u, publicKey, se.PrivateKey); err != nil {
 		return "", false, fmt.Errorf("invalid token")
 	}
@@ -162,6 +163,10 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, error) {
 
 	if now.After(u.ExpirationTime) || u.Checksum != s.checksum {
 		return "", false, fmt.Errorf("token is expired")
+	}
+
+	if !s.validateTarget(u.Target) {
+		return "", false, fmt.Errorf("access to target [%s] is denied", u.Target)
 	}
 
 	logrus.
@@ -185,12 +190,17 @@ func (s *Server) authorizeConnection(network, address string) bool {
 	return result
 }
 
-func (s *Server) registerSession(id, key string) (*api.SessionResponse, error) {
+func (s *Server) registerSession(id, key, target string) (*api.SessionResponse, error) {
 	request := api.RegisterSessionRequest{
 		SessionId:  id,
 		SessionKey: key,
-		Filters:    s.aclPolicy.identityFilters,
-		Checksum:   s.checksum,
+		Target:     target,
+		Policy: api.Policy{
+			Subs:    s.policy.Subs,
+			Emails:  s.policy.Emails,
+			Filters: s.policy.Filters,
+		},
+		Checksum: s.checksum,
 	}
 
 	return s.sessionRegistrar.RegisterSession(&request)
@@ -206,7 +216,7 @@ func (s *Server) validateTarget(target string) bool {
 		return false
 	}
 
-	for _, t := range s.aclPolicy.targetFilters {
+	for _, t := range s.targetFilters {
 		if t.validate(host, port) {
 			return true
 		}

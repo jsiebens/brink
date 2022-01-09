@@ -8,11 +8,6 @@ import (
 	"strings"
 )
 
-type aclPolicy struct {
-	identityFilters []string
-	targetFilters   []TargetFilter
-}
-
 func parseTargetFilters(filters []string) ([]TargetFilter, error) {
 	var result []TargetFilter
 

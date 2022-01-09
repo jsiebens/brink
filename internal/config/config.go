@@ -69,6 +69,8 @@ type Oidc struct {
 }
 
 type Policy struct {
+	Subs    []string `mapstructure:"subs"`
+	Emails  []string `mapstructure:"emails"`
 	Filters []string `mapstructure:"filters"`
 	Targets []string `mapstructure:"targets"`
 }
