@@ -19,7 +19,7 @@ require (
 	github.com/mitchellh/pointerstructure v1.2.1
 	github.com/mr-tron/base58 v1.2.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/rancher/remotedialer v0.2.6-0.20210802164054-73730a94f4a1
+	github.com/rancher/remotedialer v0.2.6-0.20220107175045-b2d660c628d5
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.0
@@ -51,10 +51,10 @@ require (
 	github.com/pelletier/go-toml v1.9.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.4.0 // indirect
+	github.com/prometheus/client_golang v1.11.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
-	github.com/prometheus/common v0.9.1 // indirect
-	github.com/prometheus/procfs v0.0.8 // indirect
+	github.com/prometheus/common v0.32.1 // indirect
+	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/spf13/afero v1.6.0 // indirect
 	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
