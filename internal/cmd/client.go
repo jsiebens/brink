@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/jsiebens/brink/internal/client"
+	"github.com/jsiebens/brink/internal/util"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/execabs"
@@ -125,7 +126,7 @@ func sshCommand() *cobra.Command {
 
 		buildArgs := func(addr, ip, port string) (sshArgs []string) {
 			sshArgs = append(sshArgs, "-p", port, ip)
-			sshArgs = append(sshArgs, "-o", fmt.Sprintf("HostKeyAlias=%s", targetAddr))
+			sshArgs = append(sshArgs, "-o", fmt.Sprintf("HostKeyAlias=brink:%s:%s", util.StripScheme(proxyAddr), targetAddr))
 			if username != "" {
 				sshArgs = append(sshArgs, "-l", username)
 			}

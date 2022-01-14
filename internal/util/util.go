@@ -15,6 +15,19 @@ import (
 	"net/url"
 )
 
+func StripScheme(input string) string {
+	ok, u := isValidUrl(input)
+	if ok {
+		return u.Host
+	}
+	ok, u = isValidUrl("wss://" + input)
+	if ok {
+		return u.Host
+	}
+
+	return ""
+}
+
 func NormalizeWsUrl(input string) (*url.URL, error) {
 
 	normalizeUrl := func(u *url.URL) (*url.URL, error) {
