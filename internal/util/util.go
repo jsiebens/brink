@@ -28,9 +28,9 @@ func StripScheme(input string) string {
 	return ""
 }
 
-func NormalizeWsUrl(input string) (*url.URL, error) {
+func NormalizeWsUrl(input string) (string, error) {
 
-	normalizeUrl := func(u *url.URL) (*url.URL, error) {
+	normalizeUrl := func(u *url.URL) (string, error) {
 		switch u.Scheme {
 		case "http":
 			u.Scheme = "ws"
@@ -41,7 +41,7 @@ func NormalizeWsUrl(input string) (*url.URL, error) {
 			u.Scheme = "wss"
 		}
 
-		return u, nil
+		return u.String(), nil
 	}
 
 	ok, u := isValidUrl(input)
@@ -53,12 +53,12 @@ func NormalizeWsUrl(input string) (*url.URL, error) {
 		return normalizeUrl(u)
 	}
 
-	return nil, fmt.Errorf("invalid target")
+	return "", fmt.Errorf("invalid url [%s]", input)
 }
 
-func NormalizeHttpUrl(input string) (*url.URL, error) {
+func NormalizeHttpUrl(input string) (string, error) {
 
-	normalizeUrl := func(u *url.URL) (*url.URL, error) {
+	normalizeUrl := func(u *url.URL) (string, error) {
 		switch u.Scheme {
 		case "ws":
 			u.Scheme = "http"
@@ -69,7 +69,7 @@ func NormalizeHttpUrl(input string) (*url.URL, error) {
 			u.Scheme = "https"
 		}
 
-		return u, nil
+		return u.String(), nil
 	}
 
 	ok, u := isValidUrl(input)
@@ -81,7 +81,7 @@ func NormalizeHttpUrl(input string) (*url.URL, error) {
 		return normalizeUrl(u)
 	}
 
-	return nil, fmt.Errorf("invalid target")
+	return "", fmt.Errorf("invalid url [%s]", input)
 }
 
 // isValidUrl tests a string to determine if it is a well-structured url or not.

@@ -33,7 +33,7 @@ func NewServer(config *config.Config, cache cache.Cache, registrar SessionRegist
 
 		registrar = &remoteSessionRegistrar{
 			client:            resty.New(),
-			authServerBaseUrl: url.String(),
+			authServerBaseUrl: url,
 		}
 	}
 

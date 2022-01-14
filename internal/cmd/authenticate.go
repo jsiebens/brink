@@ -51,7 +51,7 @@ func logoutCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		_ = client.DeleteAuthToken(url.String())
+		_ = client.DeleteAuthToken(url)
 
 		return nil
 	}
