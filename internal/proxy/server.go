@@ -128,16 +128,15 @@ func (s *Server) authSession(c echo.Context) error {
 
 func (s *Server) proxy() echo.HandlerFunc {
 	rd := remotedialer.New(s.authorizeClient, remotedialer.DefaultErrorWriter)
-	rd.ClientConnectAuthorizer = s.authorizeConnection
 	return echo.WrapHandler(rd)
 }
 
-func (s *Server) authorizeClient(req *http.Request) (string, bool, error) {
+func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.ConnectAuthorizer, error) {
 	id := req.Header.Get(IdHeader)
 	auth := req.Header.Get(AuthHeader)
 
 	if id == "" || auth == "" {
-		return "", false, fmt.Errorf("missing id and/or auth header")
+		return "", false, nil, fmt.Errorf("missing id and/or auth header")
 	}
 
 	var se = session{}
@@ -146,27 +145,27 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, error) {
 	defer s.sessions.Delete(id)
 
 	if err != nil || !ok {
-		return "", false, nil
+		return "", false, nil, nil
 	}
 
 	publicKey, err := s.sessionRegistrar.GetPublicKey()
 	if err != nil {
-		return "", false, err
+		return "", false, nil, err
 	}
 
 	var u = &api.SessionToken{}
 	if err := util.OpenBase58(auth, u, publicKey, se.PrivateKey); err != nil {
-		return "", false, fmt.Errorf("invalid token")
+		return "", false, nil, fmt.Errorf("invalid token")
 	}
 
 	now := time.Now().UTC()
 
 	if now.After(u.ExpirationTime) || u.Checksum != s.checksum {
-		return "", false, fmt.Errorf("token is expired")
+		return "", false, nil, fmt.Errorf("token is expired")
 	}
 
 	if !s.validateTarget(u.Target) {
-		return "", false, fmt.Errorf("access to target [%s] is denied", u.Target)
+		return "", false, nil, fmt.Errorf("access to target [%s] is denied", u.Target)
 	}
 
 	logrus.
@@ -175,9 +174,30 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, error) {
 		WithField("email", u.Email).
 		Info("Client authorized")
 
-	return id, true, nil
+	return id, true, s.connectAuthorizer(u), nil
 }
 
+func (s *Server) connectAuthorizer(token *api.SessionToken) remotedialer.ConnectAuthorizer {
+	return func(proto, address string) bool {
+		result := token.Target == address
+
+		if result {
+			logrus.
+				WithField("id", token.UserID).
+				WithField("name", token.Username).
+				WithField("email", token.Email).
+				WithField("addr", address).Info("Connection allowed")
+		} else {
+			logrus.
+				WithField("id", token.UserID).
+				WithField("name", token.Username).
+				WithField("email", token.Email).
+				WithField("addr", address).Info("Connection declined")
+		}
+
+		return result
+	}
+}
 func (s *Server) authorizeConnection(network, address string) bool {
 	result := s.validateTarget(address)
 

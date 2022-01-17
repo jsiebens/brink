@@ -2,6 +2,8 @@ module github.com/jsiebens/brink
 
 go 1.17
 
+replace github.com/rancher/remotedialer => github.com/jsiebens/remotedialer v0.2.6-0.20220117065211-717bed61bfab
+
 require (
 	github.com/coreos/go-oidc/v3 v3.1.0
 	github.com/go-redis/cache/v8 v8.4.3
