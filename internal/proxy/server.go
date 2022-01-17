@@ -24,7 +24,7 @@ const (
 	AuthHeader = "x-brink-auth"
 )
 
-func NewServer(config *config.Config, cache cache.Cache, registrar SessionRegistrar) (*Server, error) {
+func NewServer(config config.Proxy, cache cache.Cache, registrar SessionRegistrar) (*Server, error) {
 	if registrar == nil {
 		url, err := util.NormalizeHttpUrl(config.AuthServer)
 		if err != nil {

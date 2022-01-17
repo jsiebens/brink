@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-func NewServer(config *config.Config, cache cache.Cache) (*Server, error) {
+func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
 	publicKey, privateKey, err := util.ParseOrGenerateKey(config.Key)
 	if err != nil {
 		return nil, err

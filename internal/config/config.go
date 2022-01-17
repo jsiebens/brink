@@ -34,10 +34,9 @@ func LoadConfig(path string) (*Config, error) {
 func defaultConfig() *Config {
 	return &Config{
 		ListenAddr: ":7000",
-		ServerUrl:  "http://localhost:7000",
-		Tls:        Tls{},
-		Oidc:       Oidc{},
-		Policy:     Policy{},
+		Auth: Auth{
+			ServerUrl: "https://localhost:7000",
+		},
 		Cache: Cache{
 			Type: "inmemory",
 		},
@@ -46,19 +45,29 @@ func defaultConfig() *Config {
 
 type Config struct {
 	ListenAddr string `mapstructure:"listen_addr"`
-	ServerUrl  string `mapstructure:"server_url"`
-	AuthServer string `mapstructure:"auth_server"`
-	Key        string `mapstructure:"key"`
-	Cache      Cache  `mapstructure:"cache"`
 	Tls        Tls    `mapstructure:"tls"`
-	Oidc       Oidc   `mapstructure:"oidc"`
-	Policy     Policy `mapstructure:"policy"`
+	Cache      Cache  `mapstructure:"cache"`
+	Auth       Auth   `mapstructure:"auth"`
+	Proxy      Proxy  `mapstructure:"proxy"`
+}
+
+type Cache struct {
+	Type          string `mapstructure:"type"`
+	RedisAddr     string `mapstructure:"redis_addr"`
+	RedisDB       int    `mapstructure:"redis_db"`
+	RedisPassword string `mapstructure:"redis_password"`
 }
 
 type Tls struct {
 	Disable  bool   `mapstructure:"disable"`
 	CertFile string `mapstructure:"cert_file"`
 	KeyFile  string `mapstructure:"key_file"`
+}
+
+type Auth struct {
+	Key       string `mapstructure:"key"`
+	ServerUrl string `mapstructure:"server_url"`
+	Oidc      Oidc   `mapstructure:"oidc"`
 }
 
 type Oidc struct {
@@ -68,16 +77,15 @@ type Oidc struct {
 	Scopes       []string `mapstructure:"additional_scopes"`
 }
 
+type Proxy struct {
+	Disable    bool   `mapstructure:"disable"`
+	AuthServer string `mapstructure:"auth_server"`
+	Policy     Policy `mapstructure:"policy"`
+}
+
 type Policy struct {
 	Subs    []string `mapstructure:"subs"`
 	Emails  []string `mapstructure:"emails"`
 	Filters []string `mapstructure:"filters"`
 	Targets []string `mapstructure:"targets"`
-}
-
-type Cache struct {
-	Type          string `mapstructure:"type"`
-	RedisAddr     string `mapstructure:"redis_addr"`
-	RedisDB       int    `mapstructure:"redis_db"`
-	RedisPassword string `mapstructure:"redis_password"`
 }
