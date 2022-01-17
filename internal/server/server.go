@@ -47,7 +47,7 @@ func StartServer(config *config.Config) error {
 
 	logrus.Infof("Server listening on %s", config.ListenAddr)
 
-	if config.Tls.KeyFile == "" {
+	if config.Tls.Disable {
 		return e.Start(config.ListenAddr)
 	} else {
 		return e.StartTLS(config.ListenAddr, config.Tls.CertFile, config.Tls.KeyFile)

@@ -56,6 +56,7 @@ type Config struct {
 }
 
 type Tls struct {
+	Disable  bool   `mapstructure:"disable"`
 	CertFile string `mapstructure:"cert_file"`
 	KeyFile  string `mapstructure:"key_file"`
 }
