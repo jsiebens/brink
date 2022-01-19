@@ -198,17 +198,6 @@ func (s *Server) connectAuthorizer(token *api.SessionToken) remotedialer.Connect
 		return result
 	}
 }
-func (s *Server) authorizeConnection(network, address string) bool {
-	result := s.validateTarget(address)
-
-	if result {
-		logrus.WithField("network", network).WithField("addr", address).Info("Connection allowed")
-	} else {
-		logrus.WithField("network", network).WithField("addr", address).Info("Connection declined")
-	}
-
-	return result
-}
 
 func (s *Server) registerSession(id, key, target string) (*api.SessionResponse, error) {
 	request := api.RegisterSessionRequest{
