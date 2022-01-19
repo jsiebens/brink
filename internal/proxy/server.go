@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"github.com/go-resty/resty/v2"
 	"github.com/jsiebens/brink/internal/api"
 	"github.com/jsiebens/brink/internal/cache"
 	"github.com/jsiebens/brink/internal/config"
@@ -25,18 +24,6 @@ const (
 )
 
 func NewServer(config config.Proxy, cache cache.Cache, registrar SessionRegistrar) (*Server, error) {
-	if registrar == nil {
-		url, err := util.NormalizeHttpUrl(config.AuthServer)
-		if err != nil {
-			return nil, err
-		}
-
-		registrar = &remoteSessionRegistrar{
-			client:            resty.New(),
-			authServerBaseUrl: url,
-		}
-	}
-
 	targetFilters, err := parseTargetFilters(config.Policy.Targets)
 	if err != nil {
 		return nil, err
@@ -72,7 +59,7 @@ type session struct {
 }
 
 func (s *Server) RegisterRoutes(e *echo.Echo) {
-	e.Any("/p/connect", s.proxy())
+	e.GET("/p/connect", s.proxy())
 	e.POST("/p/session", s.createSession)
 	e.POST("/p/auth", s.authSession)
 }

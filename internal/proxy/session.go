@@ -16,6 +16,14 @@ type SessionRegistrar interface {
 	AuthenticateSession(authToken string, request *api.AuthenticationRequest) (*api.AuthenticationResponse, error)
 }
 
+func NewRemoteSessionRegistrar(baseUrl string) (SessionRegistrar, error) {
+	url, err := util.NormalizeHttpUrl(baseUrl)
+	if err != nil {
+		return nil, err
+	}
+	return &remoteSessionRegistrar{client: resty.New(), authServerBaseUrl: url}, nil
+}
+
 type remoteSessionRegistrar struct {
 	client            *resty.Client
 	authServerBaseUrl string

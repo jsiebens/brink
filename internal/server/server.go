@@ -30,21 +30,30 @@ func StartServer(config *config.Config) error {
 
 	var registrar proxy.SessionRegistrar
 
-	if config.Proxy.AuthServer == "" {
-		logrus.Info("registering auth endpoints")
+	if config.Auth.RemoteServer == "" {
+		logrus.Info("registering oidc routes")
+
+		if config.Auth.EnableApi {
+			logrus.Info("registering auth routes")
+		}
 
 		authServer, err := auth.NewServer(config.Auth, cache.Prefixed(c, authCachePrefix))
 		if err != nil {
 			return err
 		}
-		authServer.RegisterRoutes(e)
+		authServer.RegisterRoutes(e, config.Auth.EnableApi)
 		registrar = authServer
 	} else {
-		logrus.Info("proxy has an auth_server configured, skipping auth endpoints")
+		logrus.Info("configuring remote auth server, skipping oidc and auth routes")
+		remoteSessionRegistrar, err := proxy.NewRemoteSessionRegistrar(config.Auth.RemoteServer)
+		if err != nil {
+			return err
+		}
+		registrar = remoteSessionRegistrar
 	}
 
 	if !config.Proxy.Disable {
-		logrus.Info("registering proxy endpoints")
+		logrus.Info("registering proxy routes")
 
 		proxyServer, err := proxy.NewServer(config.Proxy, cache.Prefixed(c, proxyCachePrefix), registrar)
 		if err != nil {
@@ -52,7 +61,7 @@ func StartServer(config *config.Config) error {
 		}
 		proxyServer.RegisterRoutes(e)
 	} else {
-		logrus.Info("proxy is explicitly disabled, skipping proxy endpoints")
+		logrus.Info("proxy is explicitly disabled, skipping proxy routes")
 	}
 
 	logrus.Infof("server listening on %s", config.ListenAddr)

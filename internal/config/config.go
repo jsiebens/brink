@@ -35,7 +35,9 @@ func defaultConfig() *Config {
 	return &Config{
 		ListenAddr: ":7000",
 		Auth: Auth{
-			ServerUrl: "https://localhost:7000",
+			Oidc: Oidc{
+				UrlPrefix: "https://localhost:7000",
+			},
 		},
 		Cache: Cache{
 			Type: "inmemory",
@@ -65,12 +67,14 @@ type Tls struct {
 }
 
 type Auth struct {
-	Key       string `mapstructure:"key"`
-	ServerUrl string `mapstructure:"server_url"`
-	Oidc      Oidc   `mapstructure:"oidc"`
+	RemoteServer string `mapstructure:"remote_server"`
+	EnableApi    bool   `mapstructure:"enable_api"`
+	Key          string `mapstructure:"key"`
+	Oidc         Oidc   `mapstructure:"oidc"`
 }
 
 type Oidc struct {
+	UrlPrefix    string   `mapstructure:"url_prefix"`
 	Issuer       string   `mapstructure:"issuer"`
 	ClientID     string   `mapstructure:"client_id"`
 	ClientSecret string   `mapstructure:"client_secret"`
@@ -78,9 +82,8 @@ type Oidc struct {
 }
 
 type Proxy struct {
-	Disable    bool   `mapstructure:"disable"`
-	AuthServer string `mapstructure:"auth_server"`
-	Policy     Policy `mapstructure:"policy"`
+	Disable bool   `mapstructure:"disable"`
+	Policy  Policy `mapstructure:"policy"`
 }
 
 type Policy struct {

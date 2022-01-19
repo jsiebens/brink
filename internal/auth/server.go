@@ -32,7 +32,7 @@ func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
 	server := &Server{
 		publicKey:  publicKey,
 		privateKey: privateKey,
-		serverUrl:  config.ServerUrl,
+		serverUrl:  config.Oidc.UrlPrefix,
 		provider:   provider,
 		sessions:   cache,
 	}
@@ -41,11 +41,12 @@ func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
 }
 
 type Server struct {
-	publicKey  *[32]byte
-	privateKey *[32]byte
-	serverUrl  string
-	provider   providers.AuthProvider
-	sessions   cache.Cache
+	publicKey       *[32]byte
+	privateKey      *[32]byte
+	serverUrl       string
+	provider        providers.AuthProvider
+	sessions        cache.Cache
+	enableEndpoints bool
 }
 
 type session struct {
@@ -63,10 +64,13 @@ type oauthState struct {
 	Key       string
 }
 
-func (s *Server) RegisterRoutes(e *echo.Echo) {
-	e.GET("/a/key", s.key)
-	e.POST("/a/session", s.registerSession)
-	e.POST("/a/auth", s.authSession)
+func (s *Server) RegisterRoutes(e *echo.Echo, enableEndpoints bool) {
+	if enableEndpoints {
+		e.GET("/a/key", s.key)
+		e.POST("/a/session", s.registerSession)
+		e.POST("/a/auth", s.authSession)
+	}
+
 	e.GET("/a/:id", s.login)
 	e.GET("/a/callback", s.callbackOAuth)
 	e.GET("/a/success", s.success)
