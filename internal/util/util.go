@@ -6,11 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/kelindar/binary"
-	"github.com/klauspost/compress/zstd"
-	"github.com/mr-tron/base58"
-	"golang.org/x/crypto/curve25519"
-	"golang.org/x/crypto/nacl/box"
 	"io"
 	"net/url"
 )
@@ -99,24 +94,6 @@ func isValidUrl(toTest string) (bool, *url.URL) {
 	return true, u
 }
 
-func ParseOrGenerateKey(key string) (publicKey, privateKey *[32]byte, err error) {
-	if key == "" {
-		return box.GenerateKey(rand.Reader)
-	}
-
-	publicKey = new([32]byte)
-	privateKey = new([32]byte)
-	_, err = hex.Decode(privateKey[:], []byte(key))
-	if err != nil {
-		publicKey = nil
-		privateKey = nil
-		return
-	}
-
-	curve25519.ScalarBaseMult(publicKey, privateKey)
-	return
-}
-
 func GenerateSessionId() string {
 	id := new([24]byte)
 	_, err := io.ReadFull(rand.Reader, id[:])
@@ -124,85 +101,6 @@ func GenerateSessionId() string {
 		panic(err)
 	}
 	return hex.EncodeToString(id[:])
-}
-
-func ParseKey(v string) (*[32]byte, error) {
-	b, err := hex.DecodeString(v)
-	if err != nil {
-		return nil, err
-	}
-	if len(b) != 32 {
-		return nil, fmt.Errorf("invalid hex key (%q)", v)
-	}
-
-	var key = new([32]byte)
-	copy(key[:], b)
-	return key, nil
-}
-
-func Seal(v interface{}, publicKey, privateKey *[32]byte) ([]byte, error) {
-	var nonce [24]byte
-	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
-		panic(err)
-	}
-
-	b, err := binary.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-
-	encoder, err := zstd.NewWriter(nil)
-	if err != nil {
-		return nil, err
-	}
-
-	encoded := encoder.EncodeAll(b, nil)
-
-	encrypted := box.Seal(nonce[:], encoded, &nonce, publicKey, privateKey)
-
-	return encrypted, nil
-}
-
-func Open(encrypted []byte, v interface{}, publicKey, privateKey *[32]byte) error {
-	var decryptNonce [24]byte
-	copy(decryptNonce[:], encrypted[:24])
-
-	decrypted, ok := box.Open(nil, encrypted[24:], &decryptNonce, publicKey, privateKey)
-	if !ok {
-		return fmt.Errorf("decryption error")
-	}
-
-	decoder, err := zstd.NewReader(nil)
-	if err != nil {
-		return err
-	}
-
-	decoded, err := decoder.DecodeAll(decrypted, nil)
-	if err != nil {
-		return err
-	}
-
-	if err := binary.Unmarshal(decoded, v); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func SealBase58(v interface{}, publicKey, privateKey *[32]byte) (string, error) {
-	encrypted, err := Seal(v, publicKey, privateKey)
-	if err != nil {
-		return "", err
-	}
-	return base58.FastBase58Encoding(encrypted), nil
-}
-
-func OpenBase58(msg string, v interface{}, publicKey, privateKey *[32]byte) error {
-	encrypted, err := base58.FastBase58Decoding(msg)
-	if err != nil {
-		return err
-	}
-	return Open(encrypted, v, publicKey, privateKey)
 }
 
 func Checksum(v interface{}) (string, error) {
