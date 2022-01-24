@@ -16,11 +16,6 @@ import (
 	"time"
 )
 
-const (
-	IdHeader   = "x-brink-id"
-	AuthHeader = "x-brink-auth"
-)
-
 func NewServer(config config.Proxy, cache cache.Cache, registrar SessionRegistrar) (*Server, error) {
 	targetFilters, err := parseTargetFilters(config.Policy.Targets)
 	if err != nil {
@@ -104,7 +99,7 @@ func (s *Server) authSession(c echo.Context) error {
 		return err
 	}
 
-	response, err := s.sessionRegistrar.AuthenticateSession(c.Request().Header.Get(AuthHeader), &req)
+	response, err := s.sessionRegistrar.AuthenticateSession(&req)
 	if err != nil {
 		return err
 	}
@@ -118,8 +113,8 @@ func (s *Server) proxy() echo.HandlerFunc {
 }
 
 func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.ConnectAuthorizer, error) {
-	id := req.Header.Get(IdHeader)
-	auth := req.Header.Get(AuthHeader)
+	id := req.Header.Get(api.IdHeader)
+	auth := req.Header.Get(api.AuthHeader)
 
 	if id == "" || auth == "" {
 		return "", false, nil, fmt.Errorf("missing id and/or auth header")

@@ -9,12 +9,13 @@ import (
 	"github.com/jsiebens/brink/internal/util"
 	"github.com/labstack/echo/v4"
 	"net/http"
+	"time"
 )
 
 type SessionRegistrar interface {
 	GetPublicKey() key.PublicKey
 	RegisterSession(request *api.RegisterSessionRequest) (*api.SessionResponse, error)
-	AuthenticateSession(authToken string, request *api.AuthenticationRequest) (*api.AuthenticationResponse, error)
+	AuthenticateSession(request *api.AuthenticationRequest) (*api.AuthenticationResponse, error)
 }
 
 func NewRemoteSessionRegistrar(config config.Auth) (SessionRegistrar, error) {
@@ -26,24 +27,44 @@ func NewRemoteSessionRegistrar(config config.Auth) (SessionRegistrar, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &remoteSessionRegistrar{resty.New(), url, *publicKey}, nil
+	privateKey, err := key.GeneratePrivateKey()
+	if err != nil {
+		return nil, err
+	}
+	return &remoteSessionRegistrar{
+		client:            resty.New(),
+		authServerBaseUrl: url,
+		remotePublicKey:   *publicKey,
+		localPrivateKey:   *privateKey,
+		localPublicKey:    privateKey.Public().String(),
+	}, nil
 }
 
 type remoteSessionRegistrar struct {
 	client            *resty.Client
 	authServerBaseUrl string
-	publicKey         key.PublicKey
+	remotePublicKey   key.PublicKey
+
+	localPrivateKey key.PrivateKey
+	localPublicKey  string
 }
 
 func (r *remoteSessionRegistrar) GetPublicKey() key.PublicKey {
-	return r.publicKey
+	return r.remotePublicKey
 }
 
 func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionResponse, error) {
+	token, err := r.localPrivateKey.SealBase58(r.remotePublicKey, &api.Token{ExpirationTime: time.Now().UTC().Add(5 * time.Minute)})
+	if err != nil {
+		return nil, err
+	}
+
 	var result api.SessionResponse
 	var errMsg api.MessageResponse
 
 	resp, err := r.client.R().
+		SetHeader(api.KeyHeader, r.localPublicKey).
+		SetHeader(api.TokenHeader, token).
 		SetBody(req).
 		SetResult(&result).
 		SetError(&errMsg).
@@ -61,12 +82,18 @@ func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest
 	return &result, nil
 }
 
-func (r *remoteSessionRegistrar) AuthenticateSession(authToken string, req *api.AuthenticationRequest) (*api.AuthenticationResponse, error) {
+func (r *remoteSessionRegistrar) AuthenticateSession(req *api.AuthenticationRequest) (*api.AuthenticationResponse, error) {
+	token, err := r.localPrivateKey.SealBase58(r.remotePublicKey, &api.Token{ExpirationTime: time.Now().UTC().Add(5 * time.Minute)})
+	if err != nil {
+		return nil, err
+	}
+
 	var result api.AuthenticationResponse
 	var errMsg api.MessageResponse
 
 	resp, err := r.client.R().
-		SetHeader(AuthHeader, authToken).
+		SetHeader(api.KeyHeader, r.localPublicKey).
+		SetHeader(api.TokenHeader, token).
 		SetBody(req).
 		SetResult(&result).
 		SetError(&errMsg).

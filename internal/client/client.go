@@ -8,7 +8,6 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/gorilla/websocket"
 	"github.com/jsiebens/brink/internal/api"
-	"github.com/jsiebens/brink/internal/proxy"
 	"github.com/jsiebens/brink/internal/util"
 	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
@@ -219,8 +218,7 @@ func (c *Client) startAuthentication(ctx context.Context, command, sessionId str
 	token, _ := LoadAuthToken(c.httpBaseUrl)
 
 	resp, err := c.httpClient.R().
-		SetHeader(proxy.AuthHeader, token).
-		SetBody(&api.AuthenticationRequest{Command: command, SessionId: sessionId}).
+		SetBody(&api.AuthenticationRequest{Command: command, SessionId: sessionId, AuthToken: token}).
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).
@@ -259,8 +257,8 @@ func (c *Client) pollSessionToken(ctx context.Context, sessionId string) (string
 
 func (c *Client) connect(ctx context.Context, id, token string) error {
 	headers := http.Header{}
-	headers.Add(proxy.IdHeader, id)
-	headers.Add(proxy.AuthHeader, token)
+	headers.Add(api.IdHeader, id)
+	headers.Add(api.AuthHeader, token)
 
 	return c.connectToProxy(ctx, c.websocketBaseUrl+"/p/connect", headers)
 }

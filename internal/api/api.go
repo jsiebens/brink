@@ -2,8 +2,16 @@ package api
 
 import "time"
 
+const (
+	IdHeader    = "x-brink-id"
+	AuthHeader  = "x-brink-auth"
+	KeyHeader   = "x-brink-api-key"
+	TokenHeader = "x-brink-api-token"
+)
+
 type AuthenticationRequest struct {
 	Command   string `json:"command"`
+	AuthToken string `json:"auth_token"`
 	SessionId string `json:"session_id"`
 }
 
@@ -41,6 +49,10 @@ type MessageResponse struct {
 
 type KeyResponse struct {
 	Key string `json:"key"`
+}
+
+type Token struct {
+	ExpirationTime time.Time `json:"exp"`
 }
 
 type AuthToken struct {

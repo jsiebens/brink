@@ -9,7 +9,6 @@ import (
 	"github.com/jsiebens/brink/internal/cache"
 	"github.com/jsiebens/brink/internal/config"
 	"github.com/jsiebens/brink/internal/key"
-	"github.com/jsiebens/brink/internal/proxy"
 	"github.com/labstack/echo/v4"
 	"github.com/mitchellh/pointerstructure"
 	"net/http"
@@ -75,8 +74,8 @@ type oauthState struct {
 
 func (s *Server) RegisterRoutes(e *echo.Echo, enableEndpoints bool) {
 	if enableEndpoints {
-		e.POST("/a/session", s.registerSession)
-		e.POST("/a/auth", s.authSession)
+		e.POST("/a/session", s.registerSession, s.checkApiToken)
+		e.POST("/a/auth", s.authSession, s.checkApiToken)
 	}
 
 	e.GET("/a/:id", s.login)
@@ -107,7 +106,7 @@ func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionR
 	return &response, nil
 }
 
-func (s *Server) AuthenticateSession(authToken string, req *api.AuthenticationRequest) (*api.AuthenticationResponse, error) {
+func (s *Server) AuthenticateSession(req *api.AuthenticationRequest) (*api.AuthenticationResponse, error) {
 	se := session{}
 
 	ok, err := s.sessions.Get(req.SessionId, &se)
@@ -122,9 +121,9 @@ func (s *Server) AuthenticateSession(authToken string, req *api.AuthenticationRe
 
 	switch req.Command {
 	case "start":
-		if authToken != "" {
+		if req.AuthToken != "" {
 			var u = &api.AuthToken{}
-			err := s.privateKey.OpenBase58(s.publicKey, authToken, u)
+			err := s.privateKey.OpenBase58(s.publicKey, req.AuthToken, u)
 
 			now := time.Now().UTC()
 
@@ -147,7 +146,7 @@ func (s *Server) AuthenticateSession(authToken string, req *api.AuthenticationRe
 
 				_ = s.sessions.Delete(req.SessionId)
 				return &api.AuthenticationResponse{
-					AuthToken:    authToken,
+					AuthToken:    req.AuthToken,
 					SessionToken: sessionToken,
 				}, nil
 			}
@@ -199,12 +198,41 @@ func (s *Server) authSession(c echo.Context) error {
 		return err
 	}
 
-	response, err := s.AuthenticateSession(c.Request().Header.Get(proxy.AuthHeader), &req)
+	response, err := s.AuthenticateSession(&req)
 	if err != nil {
 		return err
 	}
 
 	return c.JSON(http.StatusOK, response)
+}
+
+func (s *Server) checkApiToken(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		keyHeader := c.Request().Header.Get(api.KeyHeader)
+		tokenHeader := c.Request().Header.Get(api.TokenHeader)
+
+		if tokenHeader == "" {
+			return echo.ErrForbidden
+		}
+
+		publicKey, err := key.ParsePublicKey(keyHeader)
+		if err != nil {
+			return echo.ErrNotFound
+		}
+
+		var token api.Token
+		if err := s.privateKey.OpenBase58(*publicKey, tokenHeader, &token); err != nil {
+			return echo.ErrForbidden
+		}
+
+		now := time.Now().UTC()
+
+		if now.After(token.ExpirationTime) {
+			return echo.ErrForbidden
+		}
+
+		return next(c)
+	}
 }
 
 func (s *Server) login(c echo.Context) error {
