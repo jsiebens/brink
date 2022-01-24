@@ -45,7 +45,7 @@ func StartServer(config *config.Config) error {
 		registrar = authServer
 	} else {
 		logrus.Info("configuring remote auth server, skipping oidc and auth routes")
-		remoteSessionRegistrar, err := proxy.NewRemoteSessionRegistrar(config.Auth.RemoteServer)
+		remoteSessionRegistrar, err := proxy.NewRemoteSessionRegistrar(config.Auth)
 		if err != nil {
 			return err
 		}

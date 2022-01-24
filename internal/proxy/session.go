@@ -2,52 +2,41 @@ package proxy
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/jsiebens/brink/internal/api"
+	"github.com/jsiebens/brink/internal/config"
+	"github.com/jsiebens/brink/internal/key"
 	"github.com/jsiebens/brink/internal/util"
 	"github.com/labstack/echo/v4"
 	"net/http"
 )
 
 type SessionRegistrar interface {
-	GetPublicKey() (*[32]byte, error)
+	GetPublicKey() key.PublicKey
 	RegisterSession(request *api.RegisterSessionRequest) (*api.SessionResponse, error)
 	AuthenticateSession(authToken string, request *api.AuthenticationRequest) (*api.AuthenticationResponse, error)
 }
 
-func NewRemoteSessionRegistrar(baseUrl string) (SessionRegistrar, error) {
-	url, err := util.NormalizeHttpUrl(baseUrl)
+func NewRemoteSessionRegistrar(config config.Auth) (SessionRegistrar, error) {
+	url, err := util.NormalizeHttpUrl(config.RemoteServer)
 	if err != nil {
 		return nil, err
 	}
-	return &remoteSessionRegistrar{client: resty.New(), authServerBaseUrl: url}, nil
+	publicKey, err := key.ParsePublicKey(config.RemotePublicKey)
+	if err != nil {
+		return nil, err
+	}
+	return &remoteSessionRegistrar{resty.New(), url, *publicKey}, nil
 }
 
 type remoteSessionRegistrar struct {
 	client            *resty.Client
 	authServerBaseUrl string
+	publicKey         key.PublicKey
 }
 
-func (r *remoteSessionRegistrar) GetPublicKey() (*[32]byte, error) {
-	var result api.KeyResponse
-	var errMsg api.MessageResponse
-
-	resp, err := r.client.R().
-		SetResult(&result).
-		SetError(&errMsg).
-		SetContext(context.Background()).
-		Get(r.authServerBaseUrl + "/a/key")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode(), errMsg.Message)
-	}
-
-	return util.ParseKey(result.Key)
+func (r *remoteSessionRegistrar) GetPublicKey() key.PublicKey {
+	return r.publicKey
 }
 
 func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionResponse, error) {

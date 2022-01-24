@@ -67,10 +67,11 @@ type Tls struct {
 }
 
 type Auth struct {
-	RemoteServer string `mapstructure:"remote_server"`
-	EnableApi    bool   `mapstructure:"enable_api"`
-	Key          string `mapstructure:"key"`
-	Oidc         Oidc   `mapstructure:"oidc"`
+	RemoteServer    string `mapstructure:"remote_server"`
+	RemotePublicKey string `mapstructure:"remote_public_key"`
+	EnableApi       bool   `mapstructure:"enable_api"`
+	PrivateKey      string `mapstructure:"private_key"`
+	Oidc            Oidc   `mapstructure:"oidc"`
 }
 
 type Oidc struct {

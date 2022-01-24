@@ -20,6 +20,7 @@ func Execute() error {
 	rootCmd.AddCommand(connectCommand())
 	rootCmd.AddCommand(sshCommand())
 	rootCmd.AddCommand(logoutCommand())
+	rootCmd.AddCommand(keygenCommand())
 	rootCmd.AddCommand(versionCommand())
 
 	return rootCmd.Execute()

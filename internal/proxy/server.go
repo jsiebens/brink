@@ -1,17 +1,15 @@
 package proxy
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"github.com/jsiebens/brink/internal/api"
 	"github.com/jsiebens/brink/internal/cache"
 	"github.com/jsiebens/brink/internal/config"
+	"github.com/jsiebens/brink/internal/key"
 	"github.com/jsiebens/brink/internal/util"
 	"github.com/labstack/echo/v4"
 	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/crypto/nacl/box"
 	"net/http"
 	"strconv"
 	"strings"
@@ -54,8 +52,8 @@ type Server struct {
 }
 
 type session struct {
-	PublicKey  *[32]byte
-	PrivateKey *[32]byte
+	PublicKey  key.PublicKey
+	PrivateKey key.PrivateKey
 }
 
 func (s *Server) RegisterRoutes(e *echo.Echo) {
@@ -77,20 +75,21 @@ func (s *Server) createSession(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("access to target [%s] is denied", target))
 	}
 
-	publicKey, privateKey, err := box.GenerateKey(rand.Reader)
+	privateKey, err := key.GeneratePrivateKey()
 	if err != nil {
 		return err
 	}
+	publicKey := privateKey.Public()
 
 	sessionId := util.GenerateSessionId()
 
 	if target != "" {
-		if err := s.sessions.Set(sessionId, &session{PublicKey: publicKey, PrivateKey: privateKey}); err != nil {
+		if err := s.sessions.Set(sessionId, &session{PublicKey: publicKey, PrivateKey: *privateKey}); err != nil {
 			return err
 		}
 	}
 
-	resp, err := s.registerSession(sessionId, hex.EncodeToString(publicKey[:]), target)
+	resp, err := s.registerSession(sessionId, publicKey.String(), target)
 	if err != nil {
 		return err
 	}
@@ -128,20 +127,16 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.
 
 	var se = session{}
 
-	ok, err := s.sessions.Get(id, &se)
 	defer s.sessions.Delete(id)
-
-	if err != nil || !ok {
+	if ok, err := s.sessions.Get(id, &se); err != nil || !ok {
 		return "", false, nil, nil
 	}
 
-	publicKey, err := s.sessionRegistrar.GetPublicKey()
-	if err != nil {
-		return "", false, nil, err
-	}
+	privateKey := se.PrivateKey
+	publicKey := s.sessionRegistrar.GetPublicKey()
 
 	var u = &api.SessionToken{}
-	if err := util.OpenBase58(auth, u, publicKey, se.PrivateKey); err != nil {
+	if err := privateKey.OpenBase58(publicKey, auth, u); err != nil {
 		return "", false, nil, fmt.Errorf("invalid token")
 	}
 

@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/hashicorp/go-bexpr"
@@ -9,8 +8,8 @@ import (
 	"github.com/jsiebens/brink/internal/auth/providers"
 	"github.com/jsiebens/brink/internal/cache"
 	"github.com/jsiebens/brink/internal/config"
+	"github.com/jsiebens/brink/internal/key"
 	"github.com/jsiebens/brink/internal/proxy"
-	"github.com/jsiebens/brink/internal/util"
 	"github.com/labstack/echo/v4"
 	"github.com/mitchellh/pointerstructure"
 	"net/http"
@@ -19,9 +18,20 @@ import (
 )
 
 func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
-	publicKey, privateKey, err := util.ParseOrGenerateKey(config.Key)
-	if err != nil {
-		return nil, err
+	var privateKey *key.PrivateKey
+
+	if config.PrivateKey == "" {
+		pkey, err := key.GeneratePrivateKey()
+		if err != nil {
+			return nil, err
+		}
+		privateKey = pkey
+	} else {
+		pkey, err := key.ParsePrivateKey(config.PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+		privateKey = pkey
 	}
 
 	provider, err := providers.NewOIDCProvider(&config.Oidc)
@@ -30,8 +40,8 @@ func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
 	}
 
 	server := &Server{
-		publicKey:  publicKey,
-		privateKey: privateKey,
+		privateKey: *privateKey,
+		publicKey:  privateKey.Public(),
 		serverUrl:  config.Oidc.UrlPrefix,
 		provider:   provider,
 		sessions:   cache,
@@ -41,8 +51,8 @@ func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
 }
 
 type Server struct {
-	publicKey       *[32]byte
-	privateKey      *[32]byte
+	publicKey       key.PublicKey
+	privateKey      key.PrivateKey
 	serverUrl       string
 	provider        providers.AuthProvider
 	sessions        cache.Cache
@@ -50,7 +60,7 @@ type Server struct {
 }
 
 type session struct {
-	Key          string
+	PublicKey    key.PublicKey
 	Policy       api.Policy
 	Target       string
 	Checksum     string
@@ -61,12 +71,10 @@ type session struct {
 
 type oauthState struct {
 	SessionId string
-	Key       string
 }
 
 func (s *Server) RegisterRoutes(e *echo.Echo, enableEndpoints bool) {
 	if enableEndpoints {
-		e.GET("/a/key", s.key)
 		e.POST("/a/session", s.registerSession)
 		e.POST("/a/auth", s.authSession)
 	}
@@ -78,12 +86,17 @@ func (s *Server) RegisterRoutes(e *echo.Echo, enableEndpoints bool) {
 	e.GET("/a/error", s.callbackError)
 }
 
-func (s *Server) GetPublicKey() (*[32]byte, error) {
-	return s.publicKey, nil
+func (s *Server) GetPublicKey() key.PublicKey {
+	return s.publicKey
 }
 
 func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionResponse, error) {
-	if err := s.sessions.Set(req.SessionId, &session{Key: req.SessionKey, Policy: req.Policy, Target: req.Target, Checksum: req.Checksum}); err != nil {
+	publicKey, err := key.ParsePublicKey(req.SessionKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.sessions.Set(req.SessionId, &session{PublicKey: *publicKey, Policy: req.Policy, Target: req.Target, Checksum: req.Checksum}); err != nil {
 		return nil, err
 	}
 
@@ -111,15 +124,12 @@ func (s *Server) AuthenticateSession(authToken string, req *api.AuthenticationRe
 	case "start":
 		if authToken != "" {
 			var u = &api.AuthToken{}
-			err := util.OpenBase58(authToken, u, s.publicKey, s.privateKey)
+			err := s.privateKey.OpenBase58(s.publicKey, authToken, u)
 
 			now := time.Now().UTC()
 
 			if err == nil && now.Before(u.ExpirationTime) && u.Checksum == se.Checksum {
-				publicKey, err := util.ParseKey(se.Key)
-				if err != nil {
-					return nil, err
-				}
+				publicKey := se.PublicKey
 
 				st := api.SessionToken{
 					UserID:         u.UserID,
@@ -130,7 +140,7 @@ func (s *Server) AuthenticateSession(authToken string, req *api.AuthenticationRe
 					Checksum:       se.Checksum,
 				}
 
-				sessionToken, err := util.SealBase58(st, publicKey, s.privateKey)
+				sessionToken, err := s.privateKey.SealBase58(publicKey, st)
 				if err != nil {
 					return nil, err
 				}
@@ -166,11 +176,6 @@ func (s *Server) AuthenticateSession(authToken string, req *api.AuthenticationRe
 	}
 
 	return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid request")
-}
-
-func (s *Server) key(c echo.Context) error {
-	key, _ := s.GetPublicKey()
-	return c.JSON(http.StatusOK, &api.KeyResponse{Key: hex.EncodeToString(key[:])})
 }
 
 func (s *Server) registerSession(c echo.Context) error {
@@ -216,7 +221,7 @@ func (s *Server) login(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid session id")
 	}
 
-	state, err := s.createOAuthState(sessionId, se.Key)
+	state, err := s.createOAuthState(sessionId)
 	if err != nil {
 		return err
 	}
@@ -251,10 +256,7 @@ func (s *Server) callbackOAuth(c echo.Context) error {
 		return c.Redirect(http.StatusFound, "/a/error")
 	}
 
-	publicKey, err := util.ParseKey(se.Key)
-	if err != nil {
-		return err
-	}
+	publicKey := se.PublicKey
 
 	identity, err := s.getOAuthUser(c)
 	if err != nil {
@@ -275,7 +277,7 @@ func (s *Server) callbackOAuth(c echo.Context) error {
 			Checksum:       se.Checksum,
 		}
 
-		authToken, err := util.SealBase58(at, s.publicKey, s.privateKey)
+		authToken, err := s.privateKey.SealBase58(s.publicKey, at)
 		if err != nil {
 			return err
 		}
@@ -289,7 +291,7 @@ func (s *Server) callbackOAuth(c echo.Context) error {
 			Checksum:       se.Checksum,
 		}
 
-		sessionToken, err := util.SealBase58(st, publicKey, s.privateKey)
+		sessionToken, err := s.privateKey.SealBase58(publicKey, st)
 		if err != nil {
 			return err
 		}
@@ -355,14 +357,14 @@ func (s *Server) evaluateIdentity(policy api.Policy, identity *providers.Identit
 	return false, nil
 }
 
-func (s *Server) createOAuthState(sessionId, key string) (string, error) {
-	stateMap := oauthState{SessionId: sessionId, Key: key}
-	return util.SealBase58(stateMap, s.publicKey, s.privateKey)
+func (s *Server) createOAuthState(sessionId string) (string, error) {
+	stateMap := oauthState{SessionId: sessionId}
+	return s.privateKey.SealBase58(s.publicKey, stateMap)
 }
 
 func (s *Server) readOAuthState(state string) (*oauthState, error) {
 	stateMap := &oauthState{}
-	if err := util.OpenBase58(state, stateMap, s.publicKey, s.privateKey); err != nil {
+	if err := s.privateKey.OpenBase58(s.publicKey, state, stateMap); err != nil {
 		return nil, err
 	}
 	return stateMap, nil
