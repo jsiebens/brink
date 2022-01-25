@@ -14,7 +14,6 @@ require (
 	github.com/hashicorp/go-bexpr v0.1.11
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/iamolegga/enviper v1.3.0
-	github.com/kelindar/binary v1.0.17
 	github.com/klauspost/compress v1.13.6
 	github.com/labstack/echo/v4 v4.6.1
 	github.com/mitchellh/go-homedir v1.1.0

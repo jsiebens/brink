@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/kelindar/binary"
 	"github.com/klauspost/compress/zstd"
 	"github.com/mr-tron/base58"
 	"golang.org/x/crypto/curve25519"
@@ -77,7 +76,7 @@ func (k PrivateKey) SealBase58(p PublicKey, v interface{}) (string, error) {
 }
 
 func (k PrivateKey) Seal(p PublicKey, v interface{}) ([]byte, error) {
-	b, err := binary.Marshal(v)
+	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +125,7 @@ func (k PrivateKey) Open(p PublicKey, ciphertext []byte, v interface{}) error {
 		return err
 	}
 
-	if err := binary.Unmarshal(decoded, v); err != nil {
+	if err := json.Unmarshal(decoded, v); err != nil {
 		return err
 	}
 
