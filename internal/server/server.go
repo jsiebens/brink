@@ -9,6 +9,7 @@ import (
 	"github.com/jsiebens/brink/internal/version"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
+	"net/http"
 )
 
 const authCachePrefix = "a_"
@@ -64,6 +65,8 @@ func StartServer(config *config.Config) error {
 		logrus.Info("proxy is explicitly disabled, skipping proxy routes")
 	}
 
+	registerDefaultRoutes(e)
+
 	logrus.Infof("server listening on %s", config.ListenAddr)
 
 	if config.Tls.Disable {
@@ -71,4 +74,10 @@ func StartServer(config *config.Config) error {
 	} else {
 		return e.StartTLS(config.ListenAddr, config.Tls.CertFile, config.Tls.KeyFile)
 	}
+}
+
+func registerDefaultRoutes(e *echo.Echo) {
+	e.Any("/*", func(c echo.Context) error {
+		return c.Render(http.StatusOK, "index.html", nil)
+	})
 }
