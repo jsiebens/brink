@@ -16,10 +16,9 @@ func Execute() error {
 	}
 
 	rootCmd.AddCommand(serverCommand())
-	rootCmd.AddCommand(authenticateCommand())
+	rootCmd.AddCommand(authCommand())
 	rootCmd.AddCommand(connectCommand())
 	rootCmd.AddCommand(sshCommand())
-	rootCmd.AddCommand(logoutCommand())
 	rootCmd.AddCommand(keygenCommand())
 	rootCmd.AddCommand(versionCommand())
 

@@ -133,7 +133,14 @@ func (c *Client) authenticate(ctx context.Context) error {
 		authToken = authenticate.AuthToken
 	}
 
-	_ = StoreAuthToken(c.httpBaseUrl, authToken)
+	err = StoreAuthToken(c.httpBaseUrl, authToken)
+	if err != nil {
+		fmt.Println()
+		fmt.Printf("  Unable to store auth token in your system credential store: %s\n", err)
+		fmt.Println("  You can use this token via BRINK_AUTH_TOKEN env var")
+		fmt.Printf("  Token: %s\n", authToken)
+		fmt.Println()
+	}
 
 	return nil
 }

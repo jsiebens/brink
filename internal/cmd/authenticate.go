@@ -9,9 +9,21 @@ import (
 	"io/ioutil"
 )
 
-func authenticateCommand() *cobra.Command {
+func authCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:          "authenticate",
+		Use:   "auth",
+		Short: "Manage credentials for the Brink Client.",
+	}
+
+	command.AddCommand(loginCommand())
+	command.AddCommand(revokeCommand())
+
+	return command
+}
+
+func loginCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:          "login",
 		Short:        "Authenticate the Brink Client for a specific Proxy.",
 		SilenceUsage: true,
 	}
@@ -32,9 +44,9 @@ func authenticateCommand() *cobra.Command {
 	return command
 }
 
-func logoutCommand() *cobra.Command {
+func revokeCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:          "logout",
+		Use:          "revoke",
 		Short:        "Delete the current token from the local store.",
 		SilenceUsage: true,
 	}
