@@ -16,6 +16,8 @@ const authCachePrefix = "a_"
 const proxyCachePrefix = "p_"
 
 func StartServer(config *config.Config) error {
+	v, r := version.GetReleaseInfo()
+	logrus.Infof("Starting brink. Version %s - %s", v, r)
 
 	c, err := cache.NewCache(config.Cache)
 	if err != nil {
