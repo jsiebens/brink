@@ -104,7 +104,9 @@ func (c *Client) authenticate(ctx context.Context) error {
 		return err
 	}
 
-	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionId)
+	currentAuthToken, _ := LoadAuthToken(c.httpBaseUrl)
+
+	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionId, currentAuthToken)
 	if err != nil {
 		return err
 	}
@@ -122,7 +124,7 @@ func (c *Client) authenticate(ctx context.Context) error {
 			fmt.Println()
 		}
 
-		authToken, _, err = c.pollSessionToken(ctx, sn.SessionId)
+		authToken, _, err = c.pollSessionToken(ctx, sn.SessionId, currentAuthToken)
 		if err != nil {
 			return err
 		}
@@ -146,7 +148,9 @@ func (c *Client) start(ctx context.Context) error {
 		return err
 	}
 
-	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionId)
+	currentAuthToken, _ := LoadAuthToken(c.httpBaseUrl)
+
+	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionId, currentAuthToken)
 	if err != nil {
 		return err
 	}
@@ -165,7 +169,7 @@ func (c *Client) start(ctx context.Context) error {
 			fmt.Println()
 		}
 
-		authToken, sessionToken, err = c.pollSessionToken(ctx, sn.SessionId)
+		authToken, sessionToken, err = c.pollSessionToken(ctx, sn.SessionId, currentAuthToken)
 		if err != nil {
 			return err
 		}
@@ -211,14 +215,12 @@ func (c *Client) createSession(ctx context.Context) (*api.SessionResponse, error
 	return &result, nil
 }
 
-func (c *Client) startAuthentication(ctx context.Context, command, sessionId string) (*api.AuthenticationResponse, error) {
+func (c *Client) startAuthentication(ctx context.Context, command, sessionId string, currentAuthToken string) (*api.AuthenticationResponse, error) {
 	var result api.AuthenticationResponse
 	var errMsg api.MessageResponse
 
-	token, _ := LoadAuthToken(c.httpBaseUrl)
-
 	resp, err := c.httpClient.R().
-		SetBody(&api.AuthenticationRequest{Command: command, SessionId: sessionId, AuthToken: token}).
+		SetBody(&api.AuthenticationRequest{Command: command, SessionId: sessionId, AuthToken: currentAuthToken}).
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).
@@ -235,13 +237,13 @@ func (c *Client) startAuthentication(ctx context.Context, command, sessionId str
 	return &result, nil
 }
 
-func (c *Client) pollSessionToken(ctx context.Context, sessionId string) (string, string, error) {
+func (c *Client) pollSessionToken(ctx context.Context, sessionId string, currentAuthToken string) (string, string, error) {
 	for {
 		select {
 		case <-ctx.Done():
 			return "", "", ctx.Err()
 		case <-time.After(1500 * time.Millisecond):
-			resp, err := c.startAuthentication(ctx, "token", sessionId)
+			resp, err := c.startAuthentication(ctx, "token", sessionId, currentAuthToken)
 			if err != nil {
 				return "", "", err
 			}
