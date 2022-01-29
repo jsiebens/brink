@@ -3,23 +3,27 @@ package proxy
 import (
 	"fmt"
 	"github.com/gobwas/glob"
+	"github.com/jsiebens/brink/internal/config"
 	"net"
 	"strconv"
 	"strings"
 )
 
-func parseTargetFilters(filters []string) ([]TargetFilter, error) {
-	var result []TargetFilter
+func parseTargetFilters(policies map[string]config.Policy) (map[string][]TargetFilter, error) {
+	var filtersMap = map[string][]TargetFilter{}
+	for name, policy := range policies {
+		var filters []TargetFilter
 
-	for _, f := range filters {
-		filter, err := parseTargetFilter(f)
-		if err != nil {
-			return nil, err
+		for _, f := range policy.Targets {
+			filter, err := parseTargetFilter(f)
+			if err != nil {
+				return nil, err
+			}
+			filters = append(filters, filter)
 		}
-		result = append(result, filter)
+		filtersMap[name] = filters
 	}
-
-	return result, nil
+	return filtersMap, nil
 }
 
 func parseTargetFilter(rule string) (TargetFilter, error) {

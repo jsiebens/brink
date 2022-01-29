@@ -60,7 +60,7 @@ type Server struct {
 
 type session struct {
 	PublicKey    key.PublicKey
-	Policy       api.Policy
+	Policies     map[string]api.Policy
 	Target       string
 	Checksum     string
 	AuthToken    string
@@ -95,7 +95,7 @@ func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionR
 		return nil, err
 	}
 
-	if err := s.sessions.Set(req.SessionId, &session{PublicKey: *publicKey, Policy: req.Policy, Target: req.Target, Checksum: req.Checksum}); err != nil {
+	if err := s.sessions.Set(req.SessionId, &session{PublicKey: *publicKey, Policies: req.Policies, Target: req.Target, Checksum: req.Checksum}); err != nil {
 		return nil, err
 	}
 
@@ -134,6 +134,7 @@ func (s *Server) AuthenticateSession(req *api.AuthenticationRequest) (*api.Authe
 					UserID:         u.UserID,
 					Username:       u.Username,
 					Email:          u.Email,
+					Roles:          u.Roles,
 					Target:         se.Target,
 					ExpirationTime: now.Add(5 * time.Minute).UTC(),
 					Checksum:       se.Checksum,
@@ -291,7 +292,7 @@ func (s *Server) callbackOAuth(c echo.Context) error {
 		return err
 	}
 
-	authorized, err := s.evaluateIdentity(se.Policy, identity)
+	authorized, roles, err := s.evaluatePolicies(se.Policies, identity)
 	if err != nil {
 		return err
 	}
@@ -301,6 +302,7 @@ func (s *Server) callbackOAuth(c echo.Context) error {
 			UserID:         identity.UserID,
 			Username:       identity.Username,
 			Email:          identity.Email,
+			Roles:          roles,
 			ExpirationTime: time.Now().Add(24 * time.Hour).UTC(),
 			Checksum:       se.Checksum,
 		}
@@ -314,6 +316,7 @@ func (s *Server) callbackOAuth(c echo.Context) error {
 			UserID:         identity.UserID,
 			Username:       identity.Username,
 			Email:          identity.Email,
+			Roles:          roles,
 			Target:         se.Target,
 			ExpirationTime: time.Now().Add(5 * time.Minute).UTC(),
 			Checksum:       se.Checksum,
@@ -349,7 +352,20 @@ func (s *Server) callbackError(c echo.Context) error {
 	return c.Render(http.StatusOK, "error.html", nil)
 }
 
-func (s *Server) evaluateIdentity(policy api.Policy, identity *providers.Identity) (bool, error) {
+func (s *Server) evaluatePolicies(policies map[string]api.Policy, identity *providers.Identity) (bool, []string, error) {
+	var roles []string
+
+	for role, policy := range policies {
+		ok, _ := s.evaluatePolicy(policy, identity)
+		if ok {
+			roles = append(roles, role)
+		}
+	}
+
+	return len(roles) != 0, roles, nil
+}
+
+func (s *Server) evaluatePolicy(policy api.Policy, identity *providers.Identity) (bool, error) {
 	for _, sub := range policy.Subs {
 		if identity.UserID == sub {
 			return true, nil

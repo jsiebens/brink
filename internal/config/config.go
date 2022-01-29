@@ -83,8 +83,8 @@ type Oidc struct {
 }
 
 type Proxy struct {
-	Disable bool   `mapstructure:"disable"`
-	Policy  Policy `mapstructure:"policy"`
+	Disable  bool              `mapstructure:"disable"`
+	Policies map[string]Policy `mapstructure:"policies"`
 }
 
 type Policy struct {

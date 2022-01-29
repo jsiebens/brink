@@ -17,12 +17,12 @@ import (
 )
 
 func NewServer(config config.Proxy, cache cache.Cache, registrar SessionRegistrar) (*Server, error) {
-	targetFilters, err := parseTargetFilters(config.Policy.Targets)
+	targetFilters, err := parseTargetFilters(config.Policies)
 	if err != nil {
 		return nil, err
 	}
 
-	checksum, err := util.Checksum(&config.Policy)
+	checksum, err := util.Checksum(&config.Policies)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func NewServer(config config.Proxy, cache cache.Cache, registrar SessionRegistra
 	server := &Server{
 		sessionRegistrar: registrar,
 		sessions:         cache,
-		policy:           config.Policy,
+		policy:           config.Policies,
 		targetFilters:    targetFilters,
 		checksum:         checksum,
 	}
@@ -41,8 +41,8 @@ func NewServer(config config.Proxy, cache cache.Cache, registrar SessionRegistra
 type Server struct {
 	sessionRegistrar SessionRegistrar
 	sessions         cache.Cache
-	policy           config.Policy
-	targetFilters    []TargetFilter
+	policy           map[string]config.Policy
+	targetFilters    map[string][]TargetFilter
 	checksum         string
 }
 
@@ -141,7 +141,7 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.
 		return "", false, nil, fmt.Errorf("token is expired")
 	}
 
-	if !s.validateTarget(u.Target) {
+	if !s.validateRolesAndTarget(u.Roles, u.Target) {
 		return "", false, nil, fmt.Errorf("access to target [%s] is denied", u.Target)
 	}
 
@@ -177,19 +177,46 @@ func (s *Server) connectAuthorizer(token *api.SessionToken) remotedialer.Connect
 }
 
 func (s *Server) registerSession(id, key, target string) (*api.SessionResponse, error) {
+	var apiPolicies = map[string]api.Policy{}
+
+	for n, p := range s.policy {
+		apiPolicies[n] = api.Policy{
+			Subs:    p.Subs,
+			Emails:  p.Emails,
+			Filters: p.Filters,
+		}
+	}
+
 	request := api.RegisterSessionRequest{
 		SessionId:  id,
 		SessionKey: key,
 		Target:     target,
-		Policy: api.Policy{
-			Subs:    s.policy.Subs,
-			Emails:  s.policy.Emails,
-			Filters: s.policy.Filters,
-		},
-		Checksum: s.checksum,
+		Policies:   apiPolicies,
+		Checksum:   s.checksum,
 	}
 
 	return s.sessionRegistrar.RegisterSession(&request)
+}
+
+func (s *Server) validateRolesAndTarget(roles []string, target string) bool {
+	n := strings.SplitN(target, ":", 2)
+
+	host := n[0]
+	port, err := strconv.ParseUint(n[1], 10, 64)
+
+	if err != nil {
+		return false
+	}
+
+	for _, r := range roles {
+		for _, t := range s.targetFilters[r] {
+			if t.validate(host, port) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (s *Server) validateTarget(target string) bool {
@@ -202,9 +229,11 @@ func (s *Server) validateTarget(target string) bool {
 		return false
 	}
 
-	for _, t := range s.targetFilters {
-		if t.validate(host, port) {
-			return true
+	for _, r := range s.targetFilters {
+		for _, t := range r {
+			if t.validate(host, port) {
+				return true
+			}
 		}
 	}
 
