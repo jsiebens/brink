@@ -1,0 +1,19 @@
+tls:
+  disable: true
+
+auth:
+  url_prefix: "http://localhost:7000"
+  provider:
+    issuer: "http://dex.localtest.me:5556"
+    client_id: "brink"
+    client_secret: "brink"
+
+proxy:
+  policies:
+    default:
+      emails:
+        - john@local
+      targets:
+        - redis:6379
+        - parttysh:2222
+        - nginx:80

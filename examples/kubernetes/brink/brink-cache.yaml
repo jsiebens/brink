@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: brink-cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: brink-cache
+  template:
+    metadata:
+      labels:
+        app: brink-cache
+    spec:
+      containers:
+        - name: brink-cache
+          image: redis:alpine
+          imagePullPolicy: Always
+          ports:
+            - name: brink-cache
+              protocol: TCP
+              containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: brink-cache
+  labels:
+    app: brink-cache
+spec:
+  selector:
+    app: brink-cache
+  ports:
+    - name: http
+      targetPort: 6379
+      port: 6379

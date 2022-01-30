@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: brink-auth
+data:
+  config.yaml: |
+    cache:
+      type: redis
+      redis_addr: brink-cache:6379
+
+    tls:
+      disable: true
+    
+    auth:
+      private_key: c659ba0a62399baf1265e671e69829f1a088dd3fefa1e866438b0a5329a5fe3f
+      enable_api: true
+      url_prefix: "http://localhost:7000"
+
+    proxy:
+      disable: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: brink-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: brink-auth
+  template:
+    metadata:
+      labels:
+        app: brink-auth
+    spec:
+      containers:
+        - name: brink-auth
+          image: ghcr.io/jsiebens/brink:latest
+          imagePullPolicy: Always
+          args:
+            - server
+            - --config
+            - /brink/config.yaml
+          envFrom:
+            - secretRef:
+                name: brink-oidc
+          volumeMounts:
+            - name: config
+              mountPath: /brink
+      volumes:
+        - name: config
+          configMap:
+            name: brink-auth
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: brink-auth
+  labels:
+    app: brink-auth
+spec:
+  selector:
+    app: brink-auth
+  ports:
+    - name: http
+      targetPort: 7000
+      port: 7000

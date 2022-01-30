@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: brink-prod
+data:
+  config.yaml: |
+    cache:
+      type: redis
+      redis_addr: brink-cache:6379
+
+    tls:
+      disable: true
+
+    auth:
+      remote_server: http://brink-auth:7000
+      remote_public_key: 97d3899ee5c1d4c5012691cca93ffc00f21aa916df3b6d7703511e96568e1606
+    
+    proxy:
+      policies:
+        prod:
+          filters: [ "*" ]
+          targets: 
+            - "redis.production.svc:6379"
+            - "postgres.production.svc:5432"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: brink-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: brink-prod
+  template:
+    metadata:
+      labels:
+        app: brink-prod
+    spec:
+      containers:
+        - name: brink-prod
+          image: ghcr.io/jsiebens/brink:latest
+          imagePullPolicy: Always
+          args:
+            - server
+            - --config
+            - /brink/config.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /brink
+      volumes:
+        - name: config
+          configMap:
+            name: brink-prod
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: brink-prod
+  labels:
+    app: brink-prod
+spec:
+  selector:
+    app: brink-prod
+  ports:
+    - name: http
+      targetPort: 7000
+      port: 7000

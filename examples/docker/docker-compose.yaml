@@ -1,0 +1,38 @@
+version: '3.8'
+services:
+
+  dex:
+    image: dexidp/dex
+    ports:
+      - "5556:5556"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./config-dex.yaml:/config.yaml:ro
+    command: [ 'dex', 'serve','/config.yaml' ]
+    networks:
+      default:
+        aliases:
+          - dex.localtest.me
+
+  brink:
+    restart: unless-stopped
+    image: ghcr.io/jsiebens/brink:latest
+    command: [ 'server', '--config', '/config.yaml' ]
+    ports:
+      - "7000:7000"
+    volumes:
+      - ./config-brink.yaml:/config.yaml:ro
+
+  redis:
+    image: redis
+
+  postgres:
+    image: postgres:alpine
+    environment:
+      POSTGRES_PASSWORD: foo
+
+  nginx:
+    image: nginx
+
+  parttysh:
+    image: ghcr.io/jsiebens/parttysh:latest
