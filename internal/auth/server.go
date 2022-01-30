@@ -33,7 +33,7 @@ func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
 		privateKey = pkey
 	}
 
-	provider, err := providers.NewOIDCProvider(&config.Oidc)
+	provider, err := providers.NewProvider(&config.Provider)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
 	server := &Server{
 		privateKey: *privateKey,
 		publicKey:  privateKey.Public(),
-		serverUrl:  config.Oidc.UrlPrefix,
+		serverUrl:  config.UrlPrefix,
 		provider:   provider,
 		sessions:   cache,
 	}

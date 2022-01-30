@@ -10,8 +10,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var defaultScopes = []string{oidc.ScopeOpenID, "email", "profile"}
-
 type OIDCProvider struct {
 	clientID     string
 	clientSecret string
@@ -20,7 +18,8 @@ type OIDCProvider struct {
 	verifier     *oidc.IDTokenVerifier
 }
 
-func NewOIDCProvider(c *config.Oidc) (*OIDCProvider, error) {
+func NewOIDCProvider(c *config.Provider) (*OIDCProvider, error) {
+	defaultScopes := []string{oidc.ScopeOpenID, "email", "profile"}
 	provider, err := oidc.NewProvider(context.Background(), c.Issuer)
 	if err != nil {
 		return nil, err
