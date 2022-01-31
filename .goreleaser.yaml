@@ -1,0 +1,68 @@
+project_name: brink
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/brink
+    env: [ CGO_ENABLED=0 ]
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X github.com/jsiebens/brink/internal/version.Version={{.Version}} -X github.com/jsiebens/brink/internal/version.GitCommit={{.Commit}}
+
+dockers:
+  - image_templates: [ "ghcr.io/jsiebens/{{ .ProjectName }}:{{ .Version }}-amd64" ]
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64
+  - image_templates: [ "ghcr.io/jsiebens/{{ .ProjectName }}:{{ .Version }}-arm64" ]
+    goarch: arm64
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm64
+docker_manifests:
+  - name_template: ghcr.io/jsiebens/{{ .ProjectName }}:{{ .Version }}
+    image_templates:
+      - ghcr.io/jsiebens/{{ .ProjectName }}:{{ .Version }}-amd64
+      - ghcr.io/jsiebens/{{ .ProjectName }}:{{ .Version }}-arm64
+  - name_template: ghcr.io/jsiebens/{{ .ProjectName }}:latest
+    image_templates:
+      - ghcr.io/jsiebens/{{ .ProjectName }}:{{ .Version }}-amd64
+      - ghcr.io/jsiebens/{{ .ProjectName }}:{{ .Version }}-arm64
+
+archives:
+  - format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^test:'
+      - '^chore'
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+      - go mod tidy
+  groups:
+    - title: 'New Features'
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 10
+    - title: Other work
+      order: 999
