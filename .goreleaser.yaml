@@ -53,6 +53,7 @@ changelog:
     exclude:
       - '^test:'
       - '^chore'
+      - '^docs'
       - Merge pull request
       - Merge remote-tracking branch
       - Merge branch

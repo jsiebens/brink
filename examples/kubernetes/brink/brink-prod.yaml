@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
         - name: brink-prod
-          image: ghcr.io/jsiebens/brink:latest
+          image: ghcr.io/jsiebens/brink:0.1.0
           imagePullPolicy: Always
           args:
             - server
