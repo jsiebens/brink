@@ -4,15 +4,17 @@
 [![test](https://img.shields.io/github/workflow/status/jsiebens/brink/Latest%20Development%20Build/main)](https://github.com/jsiebens/brink/actions)
 [![report](https://goreportcard.com/badge/github.com/jsiebens/brink)](https://goreportcard.com/report/github.com/jsiebens/brink)
 
-__brink__ is an Identity-Aware Proxy (IAP) for TCP forwarding. It allows you to establish a secure websocket connection
-over which you can forward SSH, RDP, and other traffic to your private services. It is the building block towards
-BeyondCorp, a model designed by Google to secure applications in Zero-Trust networks.
+__brink__ is a lightweight Identity-Aware Proxy (IAP) for TCP forwarding. 
+
+It allows you to establish a secure websocket connection over which you can forward SSH, RDP, 
+and other traffic to your private services, and allows you to control who can access those services based on identity. 
 
 Highlights:
 
 - access your private services from anywhere
 - identity-based access for zero-trust security
 - authenticate with GitHub or with any trusted OIDC provider
+- access policies based on identity
 - a single binary or Docker image
 - easy configuration
 
