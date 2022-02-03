@@ -54,7 +54,7 @@ type session struct {
 func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.GET("/p/connect", s.proxy())
 	e.POST("/p/session", s.createSession)
-	e.POST("/p/auth", s.authSession)
+	e.POST("/p/token", s.checkSessionToken)
 }
 
 func (s *Server) createSession(c echo.Context) error {
@@ -78,22 +78,22 @@ func (s *Server) createSession(c echo.Context) error {
 
 	sessionId := util.GenerateSessionId()
 
+	resp, err := s.registerSession(sessionId, publicKey.String(), req.AuthToken, target)
+	if err != nil {
+		return err
+	}
+
 	if target != "" {
 		if err := s.sessions.Set(sessionId, &session{PublicKey: publicKey, PrivateKey: *privateKey}); err != nil {
 			return err
 		}
 	}
 
-	resp, err := s.registerSession(sessionId, publicKey.String(), target)
-	if err != nil {
-		return err
-	}
-
 	return c.JSON(http.StatusOK, &resp)
 }
 
-func (s *Server) authSession(c echo.Context) error {
-	req := api.AuthenticationRequest{}
+func (s *Server) checkSessionToken(c echo.Context) error {
+	req := api.SessionTokenRequest{}
 
 	if err := c.Bind(&req); err != nil {
 		return err
@@ -176,7 +176,7 @@ func (s *Server) connectAuthorizer(token *api.SessionToken) remotedialer.Connect
 	}
 }
 
-func (s *Server) registerSession(id, key, target string) (*api.SessionResponse, error) {
+func (s *Server) registerSession(id, key, authToken, target string) (*api.SessionTokenResponse, error) {
 	var apiPolicies = map[string]api.Policy{}
 
 	for n, p := range s.policy {
@@ -190,6 +190,7 @@ func (s *Server) registerSession(id, key, target string) (*api.SessionResponse, 
 	request := api.RegisterSessionRequest{
 		SessionId:  id,
 		SessionKey: key,
+		AuthToken:  authToken,
 		Target:     target,
 		Policies:   apiPolicies,
 		Checksum:   s.checksum,

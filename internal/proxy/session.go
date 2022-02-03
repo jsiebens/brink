@@ -14,8 +14,8 @@ import (
 
 type SessionRegistrar interface {
 	GetPublicKey() key.PublicKey
-	RegisterSession(request *api.RegisterSessionRequest) (*api.SessionResponse, error)
-	AuthenticateSession(request *api.AuthenticationRequest) (*api.AuthenticationResponse, error)
+	RegisterSession(request *api.RegisterSessionRequest) (*api.SessionTokenResponse, error)
+	AuthenticateSession(request *api.SessionTokenRequest) (*api.SessionTokenResponse, error)
 }
 
 func NewRemoteSessionRegistrar(config config.Auth) (SessionRegistrar, error) {
@@ -53,13 +53,13 @@ func (r *remoteSessionRegistrar) GetPublicKey() key.PublicKey {
 	return r.remotePublicKey
 }
 
-func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionResponse, error) {
+func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionTokenResponse, error) {
 	token, err := r.localPrivateKey.SealBase58(r.remotePublicKey, &api.Token{ExpirationTime: time.Now().UTC().Add(5 * time.Minute)})
 	if err != nil {
 		return nil, err
 	}
 
-	var result api.SessionResponse
+	var result api.SessionTokenResponse
 	var errMsg api.MessageResponse
 
 	resp, err := r.client.R().
@@ -82,13 +82,13 @@ func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest
 	return &result, nil
 }
 
-func (r *remoteSessionRegistrar) AuthenticateSession(req *api.AuthenticationRequest) (*api.AuthenticationResponse, error) {
+func (r *remoteSessionRegistrar) AuthenticateSession(req *api.SessionTokenRequest) (*api.SessionTokenResponse, error) {
 	token, err := r.localPrivateKey.SealBase58(r.remotePublicKey, &api.Token{ExpirationTime: time.Now().UTC().Add(5 * time.Minute)})
 	if err != nil {
 		return nil, err
 	}
 
-	var result api.AuthenticationResponse
+	var result api.SessionTokenResponse
 	var errMsg api.MessageResponse
 
 	resp, err := r.client.R().
@@ -98,7 +98,7 @@ func (r *remoteSessionRegistrar) AuthenticateSession(req *api.AuthenticationRequ
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(context.Background()).
-		Post(r.authServerBaseUrl + "/a/auth")
+		Post(r.authServerBaseUrl + "/a/token")
 
 	if err != nil {
 		return nil, err

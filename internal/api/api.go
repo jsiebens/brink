@@ -9,38 +9,35 @@ const (
 	TokenHeader = "x-brink-api-token"
 )
 
-type AuthenticationRequest struct {
-	Command   string `json:"command"`
-	AuthToken string `json:"auth_token"`
-	SessionId string `json:"session_id"`
-}
-
-type AuthenticationResponse struct {
-	AuthUrl      string `json:"auth_url"`
-	AuthToken    string `json:"auth_token"`
-	SessionToken string `json:"session_token"`
-}
-
 type CreateSessionRequest struct {
-	Target string `json:"target"`
+	AuthToken string `json:"auth_token,omitempty"`
+	Target    string `json:"target,omitempty"`
+}
+
+type SessionTokenRequest struct {
+	SessionId string `json:"session_id"`
 }
 
 type RegisterSessionRequest struct {
-	SessionId  string            `json:"session_id"`
-	SessionKey string            `json:"session_key"`
-	Policies   map[string]Policy `json:"policies"`
-	Target     string            `json:"target"`
-	Checksum   string            `json:"cs"`
+	AuthToken  string            `json:"auth_token,omitempty"`
+	SessionId  string            `json:"session_id,omitempty"`
+	SessionKey string            `json:"session_key,omitempty"`
+	Policies   map[string]Policy `json:"policies,omitempty"`
+	Target     string            `json:"target,omitempty"`
+	Checksum   string            `json:"cs,omitempty"`
 }
 
 type Policy struct {
-	Subs    []string `json:"subs"`
-	Emails  []string `json:"emails"`
-	Filters []string `json:"filters"`
+	Subs    []string `json:"subs,omitempty"`
+	Emails  []string `json:"emails,omitempty"`
+	Filters []string `json:"filters,omitempty"`
 }
 
-type SessionResponse struct {
-	SessionId string `json:"session_id"`
+type SessionTokenResponse struct {
+	SessionId    string `json:"session_id,omitempty"`
+	AuthUrl      string `json:"auth_url,omitempty"`
+	AuthToken    string `json:"auth_token,omitempty"`
+	SessionToken string `json:"session_token,omitempty"`
 }
 
 type MessageResponse struct {
@@ -52,24 +49,24 @@ type KeyResponse struct {
 }
 
 type Token struct {
-	ExpirationTime time.Time `json:"exp"`
+	ExpirationTime time.Time `json:"exp,omitempty"`
 }
 
 type AuthToken struct {
-	UserID         string    `json:"user_id"`
-	Username       string    `json:"user_name"`
-	Email          string    `json:"email"`
-	Roles          []string  `json:"roles"`
-	ExpirationTime time.Time `json:"exp"`
-	Checksum       string    `json:"cs"`
+	UserID         string    `json:"user_id,omitempty"`
+	Username       string    `json:"user_name,omitempty"`
+	Email          string    `json:"email,omitempty"`
+	Roles          []string  `json:"roles,omitempty"`
+	ExpirationTime time.Time `json:"exp,omitempty"`
+	Checksum       string    `json:"cs,omitempty"`
 }
 
 type SessionToken struct {
-	UserID         string    `json:"user_id"`
-	Username       string    `json:"user_name"`
-	Email          string    `json:"email"`
-	Roles          []string  `json:"roles"`
-	Target         string    `json:"target"`
-	ExpirationTime time.Time `json:"exp"`
-	Checksum       string    `json:"cs"`
+	UserID         string    `json:"user_id,omitempty"`
+	Username       string    `json:"user_name,omitempty"`
+	Email          string    `json:"email,omitempty"`
+	Roles          []string  `json:"roles,omitempty"`
+	Target         string    `json:"target,omitempty"`
+	ExpirationTime time.Time `json:"exp,omitempty"`
+	Checksum       string    `json:"cs,omitempty"`
 }

@@ -99,38 +99,33 @@ type Client struct {
 func (c *Client) authenticate(ctx context.Context) error {
 	_ = DeleteAuthToken(c.httpBaseUrl)
 
-	sn, err := c.createSession(ctx)
-	if err != nil {
-		return err
-	}
-
 	currentAuthToken, _ := LoadAuthToken(c.httpBaseUrl)
 
-	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionId, currentAuthToken)
+	sn, err := c.createSession(ctx, currentAuthToken)
 	if err != nil {
 		return err
 	}
 
 	var authToken string
 
-	if authenticate.AuthUrl != "" {
-		err = util.OpenURL(authenticate.AuthUrl)
+	if sn.AuthUrl != "" {
+		err = util.OpenURL(sn.AuthUrl)
 		if err != nil {
 			fmt.Println()
 			fmt.Println("To authenticate, visit:")
 			fmt.Println()
-			fmt.Printf("  %s", authenticate.AuthUrl)
+			fmt.Printf("  %s", sn.AuthUrl)
 			fmt.Println()
 			fmt.Println()
 		}
 
-		authToken, _, err = c.pollSessionToken(ctx, sn.SessionId, currentAuthToken)
+		authToken, _, err = c.pollSessionToken(ctx, sn.SessionId)
 		if err != nil {
 			return err
 		}
 		fmt.Println("Success.")
 	} else {
-		authToken = authenticate.AuthToken
+		authToken = sn.AuthToken
 	}
 
 	err = StoreAuthToken(c.httpBaseUrl, authToken)
@@ -150,14 +145,9 @@ func (c *Client) start(ctx context.Context) error {
 		return err
 	}
 
-	sn, err := c.createSession(ctx)
-	if err != nil {
-		return err
-	}
-
 	currentAuthToken, _ := LoadAuthToken(c.httpBaseUrl)
 
-	authenticate, err := c.startAuthentication(ctx, "start", sn.SessionId, currentAuthToken)
+	sn, err := c.createSession(ctx, currentAuthToken)
 	if err != nil {
 		return err
 	}
@@ -165,24 +155,24 @@ func (c *Client) start(ctx context.Context) error {
 	var sessionToken string
 	var authToken string
 
-	if authenticate.AuthUrl != "" {
-		err = util.OpenURL(authenticate.AuthUrl)
+	if sn.AuthUrl != "" {
+		err = util.OpenURL(sn.AuthUrl)
 		if err != nil {
 			fmt.Println()
 			fmt.Println("To authenticate, visit:")
 			fmt.Println()
-			fmt.Printf("  %s", authenticate.AuthUrl)
+			fmt.Printf("  %s", sn.AuthUrl)
 			fmt.Println()
 			fmt.Println()
 		}
 
-		authToken, sessionToken, err = c.pollSessionToken(ctx, sn.SessionId, currentAuthToken)
+		authToken, sessionToken, err = c.pollSessionToken(ctx, sn.SessionId)
 		if err != nil {
 			return err
 		}
 	} else {
-		authToken = authenticate.AuthToken
-		sessionToken = authenticate.SessionToken
+		authToken = sn.AuthToken
+		sessionToken = sn.SessionToken
 	}
 
 	_ = StoreAuthToken(c.httpBaseUrl, authToken)
@@ -194,11 +184,13 @@ func (c *Client) start(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) createSession(ctx context.Context) (*api.SessionResponse, error) {
-	var result api.SessionResponse
+func (c *Client) createSession(ctx context.Context, authToken string) (*api.SessionTokenResponse, error) {
+	var result api.SessionTokenResponse
 	var errMsg api.MessageResponse
 
-	var req = api.CreateSessionRequest{}
+	var req = api.CreateSessionRequest{
+		AuthToken: authToken,
+	}
 
 	if c.forwarder != nil {
 		req.Target = c.forwarder.remoteAddr
@@ -222,35 +214,13 @@ func (c *Client) createSession(ctx context.Context) (*api.SessionResponse, error
 	return &result, nil
 }
 
-func (c *Client) startAuthentication(ctx context.Context, command, sessionId string, currentAuthToken string) (*api.AuthenticationResponse, error) {
-	var result api.AuthenticationResponse
-	var errMsg api.MessageResponse
-
-	resp, err := c.httpClient.R().
-		SetBody(&api.AuthenticationRequest{Command: command, SessionId: sessionId, AuthToken: currentAuthToken}).
-		SetResult(&result).
-		SetError(&errMsg).
-		SetContext(ctx).
-		Post(c.httpBaseUrl + "/p/auth")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return nil, &serverError{resp.StatusCode(), errMsg.Message}
-	}
-
-	return &result, nil
-}
-
-func (c *Client) pollSessionToken(ctx context.Context, sessionId string, currentAuthToken string) (string, string, error) {
+func (c *Client) pollSessionToken(ctx context.Context, sessionId string) (string, string, error) {
 	for {
 		select {
 		case <-ctx.Done():
 			return "", "", ctx.Err()
 		case <-time.After(1500 * time.Millisecond):
-			resp, err := c.startAuthentication(ctx, "token", sessionId, currentAuthToken)
+			resp, err := c.checkSessionToken(ctx, sessionId)
 			if err != nil {
 				return "", "", err
 			}
@@ -262,6 +232,28 @@ func (c *Client) pollSessionToken(ctx context.Context, sessionId string, current
 			return resp.AuthToken, resp.SessionToken, nil
 		}
 	}
+}
+
+func (c *Client) checkSessionToken(ctx context.Context, sessionId string) (*api.SessionTokenResponse, error) {
+	var result api.SessionTokenResponse
+	var errMsg api.MessageResponse
+
+	resp, err := c.httpClient.R().
+		SetBody(&api.SessionTokenRequest{SessionId: sessionId}).
+		SetResult(&result).
+		SetError(&errMsg).
+		SetContext(ctx).
+		Post(c.httpBaseUrl + "/p/token")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, &serverError{resp.StatusCode(), errMsg.Message}
+	}
+
+	return &result, nil
 }
 
 func (c *Client) connect(ctx context.Context, id, token string) error {

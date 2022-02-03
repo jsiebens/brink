@@ -75,7 +75,7 @@ type oauthState struct {
 func (s *Server) RegisterRoutes(e *echo.Echo, enableEndpoints bool) {
 	if enableEndpoints {
 		e.POST("/a/session", s.registerSession, s.checkApiToken)
-		e.POST("/a/auth", s.authSession, s.checkApiToken)
+		e.POST("/a/token", s.checkSessionToken, s.checkApiToken)
 	}
 
 	e.GET("/a/:id", s.login)
@@ -89,24 +89,57 @@ func (s *Server) GetPublicKey() key.PublicKey {
 	return s.publicKey
 }
 
-func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionResponse, error) {
+func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionTokenResponse, error) {
 	publicKey, err := key.ParsePublicKey(req.SessionKey)
 	if err != nil {
 		return nil, err
+	}
+
+	if req.AuthToken != "" {
+		var u = &api.AuthToken{}
+		err := s.privateKey.OpenBase58(s.publicKey, req.AuthToken, u)
+
+		now := time.Now().UTC()
+
+		if err == nil && now.Before(u.ExpirationTime) && u.Checksum == req.Checksum {
+			st := api.SessionToken{
+				UserID:         u.UserID,
+				Username:       u.Username,
+				Email:          u.Email,
+				Roles:          u.Roles,
+				Target:         req.Target,
+				ExpirationTime: now.Add(5 * time.Minute).UTC(),
+				Checksum:       req.Checksum,
+			}
+
+			sessionToken, err := s.privateKey.SealBase58(*publicKey, st)
+			if err != nil {
+				return nil, err
+			}
+
+			response := api.SessionTokenResponse{
+				SessionId:    req.SessionId,
+				SessionToken: sessionToken,
+				AuthToken:    req.AuthToken,
+			}
+
+			return &response, nil
+		}
 	}
 
 	if err := s.sessions.Set(req.SessionId, &session{PublicKey: *publicKey, Policies: req.Policies, Target: req.Target, Checksum: req.Checksum}); err != nil {
 		return nil, err
 	}
 
-	response := api.SessionResponse{
+	response := api.SessionTokenResponse{
 		SessionId: req.SessionId,
+		AuthUrl:   s.createUrl("/a/%s", req.SessionId),
 	}
 
 	return &response, nil
 }
 
-func (s *Server) AuthenticateSession(req *api.AuthenticationRequest) (*api.AuthenticationResponse, error) {
+func (s *Server) AuthenticateSession(req *api.SessionTokenRequest) (*api.SessionTokenResponse, error) {
 	se := session{}
 
 	ok, err := s.sessions.Get(req.SessionId, &se)
@@ -119,63 +152,20 @@ func (s *Server) AuthenticateSession(req *api.AuthenticationRequest) (*api.Authe
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid session id")
 	}
 
-	switch req.Command {
-	case "start":
-		if req.AuthToken != "" {
-			var u = &api.AuthToken{}
-			err := s.privateKey.OpenBase58(s.publicKey, req.AuthToken, u)
-
-			now := time.Now().UTC()
-
-			if err == nil && now.Before(u.ExpirationTime) && u.Checksum == se.Checksum {
-				publicKey := se.PublicKey
-
-				st := api.SessionToken{
-					UserID:         u.UserID,
-					Username:       u.Username,
-					Email:          u.Email,
-					Roles:          u.Roles,
-					Target:         se.Target,
-					ExpirationTime: now.Add(5 * time.Minute).UTC(),
-					Checksum:       se.Checksum,
-				}
-
-				sessionToken, err := s.privateKey.SealBase58(publicKey, st)
-				if err != nil {
-					return nil, err
-				}
-
-				_ = s.sessions.Delete(req.SessionId)
-				return &api.AuthenticationResponse{
-					AuthToken:    req.AuthToken,
-					SessionToken: sessionToken,
-				}, nil
-			}
-		}
-
-		response := api.AuthenticationResponse{
-			AuthUrl: s.createUrl("/a/%s", req.SessionId),
-		}
-
-		return &response, nil
-	case "token":
-		if se.Error != "" {
-			_ = s.sessions.Delete(req.SessionId)
-			return nil, echo.NewHTTPError(http.StatusUnauthorized, se.Error)
-		}
-
-		if se.SessionToken != "" {
-			_ = s.sessions.Delete(req.SessionId)
-			return &api.AuthenticationResponse{
-				AuthToken:    se.AuthToken,
-				SessionToken: se.SessionToken,
-			}, nil
-		}
-
-		return &api.AuthenticationResponse{}, nil
+	if se.Error != "" {
+		_ = s.sessions.Delete(req.SessionId)
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, se.Error)
 	}
 
-	return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	if se.SessionToken != "" {
+		_ = s.sessions.Delete(req.SessionId)
+		return &api.SessionTokenResponse{
+			AuthToken:    se.AuthToken,
+			SessionToken: se.SessionToken,
+		}, nil
+	}
+
+	return &api.SessionTokenResponse{}, nil
 }
 
 func (s *Server) registerSession(c echo.Context) error {
@@ -192,8 +182,8 @@ func (s *Server) registerSession(c echo.Context) error {
 	return c.JSON(http.StatusOK, &response)
 }
 
-func (s *Server) authSession(c echo.Context) error {
-	req := api.AuthenticationRequest{}
+func (s *Server) checkSessionToken(c echo.Context) error {
+	req := api.SessionTokenRequest{}
 
 	if err := c.Bind(&req); err != nil {
 		return err
