@@ -25,7 +25,7 @@ func NewOIDCProvider(c *config.Provider) (*OIDCProvider, error) {
 		return nil, err
 	}
 
-	verifier := provider.Verifier(&oidc.Config{ClientID: c.ClientID})
+	verifier := provider.Verifier(&oidc.Config{ClientID: c.ClientID, SkipClientIDCheck: c.ClientID == ""})
 
 	return &OIDCProvider{
 		clientID:     c.ClientID,
@@ -46,6 +46,29 @@ func (p *OIDCProvider) GetLoginURL(redirectURI, state string) string {
 	}
 
 	return oauth2Config.AuthCodeURL(state)
+}
+
+func (p *OIDCProvider) ExchangeIDToken(rawIdToken string) (*Identity, error) {
+	// Parse and verify ID Token payload.
+	idToken, err := p.verifier.Verify(context.Background(), rawIdToken)
+	if err != nil {
+		return nil, err
+	}
+
+	sub, email, name, tokenClaims, err := p.getTokenClaims(idToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Identity{
+		UserID:   sub,
+		Username: name,
+		Email:    email,
+		Attr: map[string]interface{}{
+			"provider": "oidc",
+			"token":    tokenClaims,
+		},
+	}, nil
 }
 
 func (p *OIDCProvider) Exchange(redirectURI, code string) (*Identity, error) {
@@ -95,6 +118,10 @@ func (p *OIDCProvider) Exchange(redirectURI, code string) (*Identity, error) {
 			"userinfo": userInfoClaims,
 		},
 	}, nil
+}
+
+func (p *OIDCProvider) IsInteractive() bool {
+	return p.provider.Endpoint().AuthURL != ""
 }
 
 func (p *OIDCProvider) getTokenClaims(idToken *oidc.IDToken) (string, string, string, map[string]interface{}, error) {

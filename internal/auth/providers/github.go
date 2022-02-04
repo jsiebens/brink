@@ -96,6 +96,14 @@ func (p *GitHubProvider) Exchange(redirectURI, code string) (*Identity, error) {
 	}, nil
 }
 
+func (p *GitHubProvider) ExchangeIDToken(rawIdToken string) (*Identity, error) {
+	return nil, fmt.Errorf("unsupported operation")
+}
+
+func (p *GitHubProvider) IsInteractive() bool {
+	return true
+}
+
 func (p *GitHubProvider) getTeams(ctx context.Context, client *github.Client) ([]string, error) {
 	var result []string
 	var page = 0

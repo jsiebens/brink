@@ -156,6 +156,45 @@ func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionT
 
 			return &response, nil
 		}
+
+		identity, err := s.provider.ExchangeIDToken(req.AuthToken)
+		if err == nil {
+			authorized, roles, err := s.evaluatePolicies(req.Policies, identity)
+			if err != nil {
+				return nil, err
+			}
+
+			if !authorized {
+				return nil, echo.NewHTTPError(http.StatusUnauthorized)
+			}
+
+			st := api.SessionToken{
+				UserID:         identity.UserID,
+				Username:       identity.Username,
+				Email:          identity.Email,
+				Roles:          roles,
+				Target:         req.Target,
+				ExpirationTime: now.Add(5 * time.Minute).UTC(),
+				Checksum:       req.Checksum,
+			}
+
+			sessionToken, err := s.privateKey.SealBase58(*publicKey, st)
+			if err != nil {
+				return nil, err
+			}
+
+			response := api.SessionTokenResponse{
+				SessionId:    req.SessionId,
+				SessionToken: sessionToken,
+				AuthToken:    req.AuthToken,
+			}
+
+			return &response, nil
+		}
+	}
+
+	if !s.provider.IsInteractive() {
+		return nil, echo.NewHTTPError(http.StatusUnauthorized)
 	}
 
 	if err := s.sessions.Set(req.SessionId, &session{PublicKey: *publicKey, Policies: req.Policies, Target: req.Target, Checksum: req.Checksum}); err != nil {

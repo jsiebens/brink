@@ -19,6 +19,8 @@ func NewProvider(c *config.Provider) (AuthProvider, error) {
 type AuthProvider interface {
 	GetLoginURL(redirectURI, state string) string
 	Exchange(redirectURI, code string) (*Identity, error)
+	ExchangeIDToken(rawIdToken string) (*Identity, error)
+	IsInteractive() bool
 }
 
 type Identity struct {
