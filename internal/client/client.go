@@ -99,9 +99,7 @@ type Client struct {
 func (c *Client) authenticate(ctx context.Context) error {
 	_ = DeleteAuthToken(c.httpBaseUrl)
 
-	currentAuthToken, _ := LoadAuthToken(c.httpBaseUrl)
-
-	sn, err := c.createSession(ctx, currentAuthToken)
+	sn, err := c.createSession(ctx, "")
 	if err != nil {
 		return err
 	}
@@ -145,7 +143,7 @@ func (c *Client) start(ctx context.Context) error {
 		return err
 	}
 
-	currentAuthToken, _ := LoadAuthToken(c.httpBaseUrl)
+	currentAuthToken, storeAuthToken, _ := LoadAuthToken(c.httpBaseUrl)
 
 	sn, err := c.createSession(ctx, currentAuthToken)
 	if err != nil {
@@ -175,7 +173,7 @@ func (c *Client) start(ctx context.Context) error {
 		sessionToken = sn.SessionToken
 	}
 
-	_ = StoreAuthToken(c.httpBaseUrl, authToken)
+	_ = storeAuthToken(c.httpBaseUrl, authToken)
 
 	if err := c.connect(ctx, sn.SessionId, sessionToken); err != nil {
 		return err

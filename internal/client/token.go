@@ -15,24 +15,26 @@ func createKeyName(proxy string) string {
 	return fmt.Sprintf("brink:%s", x)
 }
 
-func LoadAuthToken(proxy string) (string, error) {
+func LoadAuthToken(proxy string) (string, func(string, string) error, error) {
+	ignore := func(x, y string) error { return nil }
+
 	envToken := os.Getenv("BRINK_AUTH_TOKEN")
 
 	if envToken != "" {
-		return envToken, nil
+		return envToken, ignore, nil
 	}
 
 	ring, err := openKeyring()
 	if err != nil {
-		return "", err
+		return "", StoreAuthToken, err
 	}
 
 	token, err := ring.Get(createKeyName(proxy))
 	if err != nil && !errors.Is(err, keyring.ErrKeyNotFound) {
-		return "", err
+		return "", StoreAuthToken, err
 	}
 
-	return string(token.Data), nil
+	return string(token.Data), StoreAuthToken, nil
 }
 
 func StoreAuthToken(proxy, token string) error {
