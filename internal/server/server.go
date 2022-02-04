@@ -1,81 +1,44 @@
 package server
 
 import (
-	"github.com/jsiebens/brink/internal/auth"
-	"github.com/jsiebens/brink/internal/auth/templates"
-	"github.com/jsiebens/brink/internal/cache"
+	"context"
+	"errors"
 	"github.com/jsiebens/brink/internal/config"
-	"github.com/jsiebens/brink/internal/proxy"
-	"github.com/jsiebens/brink/internal/version"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
-const authCachePrefix = "a_"
-const proxyCachePrefix = "p_"
-
-func StartServer(config *config.Config) error {
-	v, r := version.GetReleaseInfo()
-	logrus.Infof("Starting brink. Version %s - %s", v, r)
-
-	c, err := cache.NewCache(config.Cache)
-	if err != nil {
-		return err
-	}
-
-	e := echo.New()
-	e.HideBanner = true
-	e.HidePort = true
-	e.Renderer = templates.NewTemplates()
-
-	version.RegisterRoutes(e)
-
-	var registrar proxy.SessionRegistrar
-
-	if config.Auth.RemoteServer == "" {
-		logrus.Info("registering oidc routes")
-
-		if config.Auth.EnableApi {
-			logrus.Info("registering auth routes")
-		}
-
-		authServer, err := auth.NewServer(config.Auth, cache.Prefixed(c, authCachePrefix))
-		if err != nil {
-			return err
-		}
-		authServer.RegisterRoutes(e, config.Auth.EnableApi)
-		registrar = authServer
-	} else {
-		logrus.Info("configuring remote auth server, skipping oidc and auth routes")
-		remoteSessionRegistrar, err := proxy.NewRemoteSessionRegistrar(config.Auth)
-		if err != nil {
-			return err
-		}
-		registrar = remoteSessionRegistrar
-	}
-
-	if !config.Proxy.Disable {
-		logrus.Info("registering proxy routes")
-
-		proxyServer, err := proxy.NewServer(config.Proxy, cache.Prefixed(c, proxyCachePrefix), registrar)
-		if err != nil {
-			return err
-		}
-		proxyServer.RegisterRoutes(e)
-	} else {
-		logrus.Info("proxy is explicitly disabled, skipping proxy routes")
-	}
-
+func Start(config *config.Config, e *echo.Echo) error {
 	registerDefaultRoutes(e)
+
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-done
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = e.Shutdown(ctx)
+	}()
 
 	logrus.Infof("server listening on %s", config.ListenAddr)
 
 	if config.Tls.Disable {
-		return e.Start(config.ListenAddr)
+		if err := e.Start(config.ListenAddr); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
 	} else {
-		return e.StartTLS(config.ListenAddr, config.Tls.CertFile, config.Tls.KeyFile)
+		if err := e.StartTLS(config.ListenAddr, config.Tls.CertFile, config.Tls.KeyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
 	}
+
+	return nil
 }
 
 func registerDefaultRoutes(e *echo.Echo) {

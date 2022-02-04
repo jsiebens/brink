@@ -1,15 +1,36 @@
 package cmd
 
 import (
+	"github.com/jsiebens/brink/internal/auth"
 	"github.com/jsiebens/brink/internal/config"
-	"github.com/jsiebens/brink/internal/server"
+	"github.com/jsiebens/brink/internal/proxy"
 	"github.com/spf13/cobra"
 )
 
 func serverCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "server",
-		Short:        "Start a server (and optionally a proxy) with a configuration file.",
+		SilenceUsage: true,
+	}
+
+	command.AddCommand(serverAuthCommand())
+	command.AddCommand(serverProxyCommand())
+
+	return command
+}
+
+func serverAuthCommand() *cobra.Command {
+	return createServerCommand("auth", "Start an auth server with a configuration file.", auth.StartServer)
+}
+
+func serverProxyCommand() *cobra.Command {
+	return createServerCommand("proxy", "Start a proxy server with a configuration file.", proxy.StartServer)
+}
+
+func createServerCommand(use, short string, start func(*config.Config) error) *cobra.Command {
+	command := &cobra.Command{
+		Use:          use,
+		Short:        short,
 		SilenceUsage: true,
 	}
 
@@ -22,7 +43,7 @@ func serverCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return server.StartServer(c)
+		return start(c)
 	}
 
 	return command

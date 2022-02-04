@@ -3,10 +3,14 @@ package proxy
 import (
 	"fmt"
 	"github.com/jsiebens/brink/internal/api"
+	"github.com/jsiebens/brink/internal/auth"
+	"github.com/jsiebens/brink/internal/auth/templates"
 	"github.com/jsiebens/brink/internal/cache"
 	"github.com/jsiebens/brink/internal/config"
 	"github.com/jsiebens/brink/internal/key"
+	"github.com/jsiebens/brink/internal/server"
 	"github.com/jsiebens/brink/internal/util"
+	"github.com/jsiebens/brink/internal/version"
 	"github.com/labstack/echo/v4"
 	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
@@ -16,7 +20,58 @@ import (
 	"time"
 )
 
-func NewServer(config config.Proxy, cache cache.Cache, registrar SessionRegistrar) (*Server, error) {
+const authCachePrefix = "pa_"
+const proxyCachePrefix = "pp_"
+
+func StartServer(config *config.Config) error {
+	v, r := version.GetReleaseInfo()
+	logrus.Infof("Starting brink proxy server. Version %s - %s", v, r)
+
+	c, err := cache.NewCache(config.Cache)
+	if err != nil {
+		return err
+	}
+
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+	e.Renderer = templates.NewTemplates()
+
+	version.RegisterRoutes(e)
+
+	var sessionRegistry auth.SessionRegistry
+
+	if config.Auth.RemoteServer == "" {
+		logrus.Info("registering oidc routes")
+
+		authServer, err := auth.NewServer(config.Auth, cache.Prefixed(c, authCachePrefix))
+		if err != nil {
+			return err
+		}
+		authServer.RegisterRoutes(e, false)
+
+		sessionRegistry = authServer
+	} else {
+		logrus.Info("configuring remote auth server, skipping oidc routes")
+		remoteSessionRegistrar, err := auth.NewRemoteSessionRegistrar(config.Auth)
+		if err != nil {
+			return err
+		}
+		sessionRegistry = remoteSessionRegistrar
+	}
+
+	logrus.Info("registering proxy routes")
+
+	proxyServer, err := NewServer(config.Proxy, cache.Prefixed(c, proxyCachePrefix), sessionRegistry)
+	if err != nil {
+		return err
+	}
+	proxyServer.RegisterRoutes(e)
+
+	return server.Start(config, e)
+}
+
+func NewServer(config config.Proxy, cache cache.Cache, registrar auth.SessionRegistry) (*Server, error) {
 	targetFilters, err := parseTargetFilters(config.Policies)
 	if err != nil {
 		return nil, err
@@ -39,7 +94,7 @@ func NewServer(config config.Proxy, cache cache.Cache, registrar SessionRegistra
 }
 
 type Server struct {
-	sessionRegistrar SessionRegistrar
+	sessionRegistrar auth.SessionRegistry
 	sessions         cache.Cache
 	policy           map[string]config.Policy
 	targetFilters    map[string][]TargetFilter
@@ -99,7 +154,7 @@ func (s *Server) checkSessionToken(c echo.Context) error {
 		return err
 	}
 
-	response, err := s.sessionRegistrar.AuthenticateSession(&req)
+	response, err := s.sessionRegistrar.CheckSessionToken(&req)
 	if err != nil {
 		return err
 	}

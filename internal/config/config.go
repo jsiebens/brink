@@ -70,7 +70,6 @@ type Tls struct {
 type Auth struct {
 	RemoteServer    string   `mapstructure:"remote_server"`
 	RemotePublicKey string   `mapstructure:"remote_public_key"`
-	EnableApi       bool     `mapstructure:"enable_api"`
 	PrivateKey      string   `mapstructure:"private_key"`
 	UrlPrefix       string   `mapstructure:"url_prefix"`
 	Provider        Provider `mapstructure:"provider"`
@@ -85,7 +84,6 @@ type Provider struct {
 }
 
 type Proxy struct {
-	Disable  bool              `mapstructure:"disable"`
 	Policies map[string]Policy `mapstructure:"policies"`
 }
 

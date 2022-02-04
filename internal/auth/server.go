@@ -6,15 +6,46 @@ import (
 	"github.com/hashicorp/go-bexpr"
 	"github.com/jsiebens/brink/internal/api"
 	"github.com/jsiebens/brink/internal/auth/providers"
+	"github.com/jsiebens/brink/internal/auth/templates"
 	"github.com/jsiebens/brink/internal/cache"
 	"github.com/jsiebens/brink/internal/config"
 	"github.com/jsiebens/brink/internal/key"
+	"github.com/jsiebens/brink/internal/server"
+	"github.com/jsiebens/brink/internal/version"
 	"github.com/labstack/echo/v4"
 	"github.com/mitchellh/pointerstructure"
+	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 	"time"
 )
+
+const authCachePrefix = "a_"
+
+func StartServer(config *config.Config) error {
+	v, r := version.GetReleaseInfo()
+	logrus.Infof("Starting brink auth server. Version %s - %s", v, r)
+
+	c, err := cache.NewCache(config.Cache)
+	if err != nil {
+		return err
+	}
+
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+	e.Renderer = templates.NewTemplates()
+
+	version.RegisterRoutes(e)
+
+	authServer, err := NewServer(config.Auth, cache.Prefixed(c, authCachePrefix))
+	if err != nil {
+		return err
+	}
+	authServer.RegisterRoutes(e, true)
+
+	return server.Start(config, e)
+}
 
 func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
 	var privateKey *key.PrivateKey
@@ -139,7 +170,7 @@ func (s *Server) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionT
 	return &response, nil
 }
 
-func (s *Server) AuthenticateSession(req *api.SessionTokenRequest) (*api.SessionTokenResponse, error) {
+func (s *Server) CheckSessionToken(req *api.SessionTokenRequest) (*api.SessionTokenResponse, error) {
 	se := session{}
 
 	ok, err := s.sessions.Get(req.SessionId, &se)
@@ -189,7 +220,7 @@ func (s *Server) checkSessionToken(c echo.Context) error {
 		return err
 	}
 
-	response, err := s.AuthenticateSession(&req)
+	response, err := s.CheckSessionToken(&req)
 	if err != nil {
 		return err
 	}

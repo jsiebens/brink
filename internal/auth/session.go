@@ -1,4 +1,4 @@
-package proxy
+package auth
 
 import (
 	"context"
@@ -12,13 +12,13 @@ import (
 	"time"
 )
 
-type SessionRegistrar interface {
+type SessionRegistry interface {
 	GetPublicKey() key.PublicKey
 	RegisterSession(request *api.RegisterSessionRequest) (*api.SessionTokenResponse, error)
-	AuthenticateSession(request *api.SessionTokenRequest) (*api.SessionTokenResponse, error)
+	CheckSessionToken(request *api.SessionTokenRequest) (*api.SessionTokenResponse, error)
 }
 
-func NewRemoteSessionRegistrar(config config.Auth) (SessionRegistrar, error) {
+func NewRemoteSessionRegistrar(config config.Auth) (SessionRegistry, error) {
 	url, err := util.NormalizeHttpUrl(config.RemoteServer)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest
 	return &result, nil
 }
 
-func (r *remoteSessionRegistrar) AuthenticateSession(req *api.SessionTokenRequest) (*api.SessionTokenResponse, error) {
+func (r *remoteSessionRegistrar) CheckSessionToken(req *api.SessionTokenRequest) (*api.SessionTokenResponse, error) {
 	token, err := r.localPrivateKey.SealBase58(r.remotePublicKey, &api.Token{ExpirationTime: time.Now().UTC().Add(5 * time.Minute)})
 	if err != nil {
 		return nil, err
