@@ -13,11 +13,7 @@ data:
     
     auth:
       private_key: c659ba0a62399baf1265e671e69829f1a088dd3fefa1e866438b0a5329a5fe3f
-      enable_api: true
       url_prefix: "http://localhost:7000"
-
-    proxy:
-      disable: true
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -35,10 +31,10 @@ spec:
     spec:
       containers:
         - name: brink-auth
-          image: ghcr.io/jsiebens/brink:0.1.0
-          imagePullPolicy: Always
+          image: ghcr.io/jsiebens/brink:0.2.0
           args:
             - server
+            - auth
             - --config
             - /brink/config.yaml
           envFrom:

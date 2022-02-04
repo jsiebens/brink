@@ -37,10 +37,10 @@ spec:
     spec:
       containers:
         - name: brink-dev
-          image: ghcr.io/jsiebens/brink:0.1.0
-          imagePullPolicy: Always
+          image: ghcr.io/jsiebens/brink:0.2.0
           args:
             - server
+            - proxy
             - --config
             - /brink/config.yaml
           volumeMounts:

@@ -50,8 +50,8 @@ Download the latest version of brink from the [releases](https://github.com/jsie
 Start a brink server instanc:
 
 ```shell
-$ brink server --config config.yaml
-INFO[0000] Starting brink. Version dev - 544a95ddf97eb8950fcce3562deb5919ce9ba092 
+$ brink server proxy --config config.yaml
+INFO[0000] Starting brink proxy server. Version 0.2.0 - 62951e34b49a1a7595076b29e433ae9fdb6688be 
 INFO[0000] registering oidc routes                      
 INFO[0000] registering proxy routes                     
 INFO[0000] server listening on :7000

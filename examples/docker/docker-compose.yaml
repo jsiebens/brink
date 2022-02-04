@@ -16,8 +16,8 @@ services:
 
   brink:
     restart: unless-stopped
-    image: ghcr.io/jsiebens/brink:0.1.0
-    command: [ 'server', '--config', '/config.yaml' ]
+    image: ghcr.io/jsiebens/brink:0.2.0
+    command: [ 'server', 'proxy', '--config', '/config.yaml' ]
     ports:
       - "7000:7000"
     volumes:
