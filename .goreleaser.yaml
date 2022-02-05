@@ -18,7 +18,7 @@ builds:
       - goos: windows
         goarch: arm64
     ldflags:
-      - -s -w -X github.com/jsiebens/brink/internal/version.Version={{.Version}} -X github.com/jsiebens/brink/internal/version.GitCommit={{.Commit}}
+      - -s -w -X github.com/jsiebens/brink/internal/version.Version={{.Version}} -X github.com/jsiebens/brink/internal/version.GitCommit={{.ShortCommit}}
 
 dockers:
   - image_templates: [ "ghcr.io/jsiebens/{{ .ProjectName }}:{{ .Version }}-amd64" ]
