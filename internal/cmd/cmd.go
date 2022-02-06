@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
+	"github.com/muesli/coral"
 	"os"
 )
 
@@ -11,7 +11,7 @@ const (
 )
 
 func Execute() error {
-	rootCmd := &cobra.Command{
+	rootCmd := &coral.Command{
 		Use: "brink",
 	}
 

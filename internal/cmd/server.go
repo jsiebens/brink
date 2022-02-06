@@ -4,11 +4,11 @@ import (
 	"github.com/jsiebens/brink/internal/auth"
 	"github.com/jsiebens/brink/internal/config"
 	"github.com/jsiebens/brink/internal/proxy"
-	"github.com/spf13/cobra"
+	"github.com/muesli/coral"
 )
 
-func serverCommand() *cobra.Command {
-	command := &cobra.Command{
+func serverCommand() *coral.Command {
+	command := &coral.Command{
 		Use:          "server",
 		SilenceUsage: true,
 	}
@@ -19,16 +19,16 @@ func serverCommand() *cobra.Command {
 	return command
 }
 
-func serverAuthCommand() *cobra.Command {
+func serverAuthCommand() *coral.Command {
 	return createServerCommand("auth", "Start an auth server with a configuration file.", auth.StartServer)
 }
 
-func serverProxyCommand() *cobra.Command {
+func serverProxyCommand() *coral.Command {
 	return createServerCommand("proxy", "Start a proxy server with a configuration file.", proxy.StartServer)
 }
 
-func createServerCommand(use, short string, start func(*config.Config) error) *cobra.Command {
-	command := &cobra.Command{
+func createServerCommand(use, short string, start func(*config.Config) error) *coral.Command {
+	command := &coral.Command{
 		Use:          use,
 		Short:        short,
 		SilenceUsage: true,
@@ -38,7 +38,7 @@ func createServerCommand(use, short string, start func(*config.Config) error) *c
 
 	command.Flags().StringVarP(&configFile, "config", "c", "", "Path to the configuration file.")
 
-	command.RunE = func(command *cobra.Command, args []string) error {
+	command.RunE = func(command *coral.Command, args []string) error {
 		c, err := config.LoadConfig(configFile)
 		if err != nil {
 			return err
