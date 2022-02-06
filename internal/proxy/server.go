@@ -53,11 +53,11 @@ func StartServer(config *config.Config) error {
 		sessionRegistry = authServer
 	} else {
 		logrus.Info("configuring remote auth server, skipping oidc routes")
-		remoteSessionRegistrar, err := auth.NewRemoteSessionRegistrar(config.Auth)
+		remoteSessionRegistry, err := auth.NewRemoteSessionRegistry(config.Auth)
 		if err != nil {
 			return err
 		}
-		sessionRegistry = remoteSessionRegistrar
+		sessionRegistry = remoteSessionRegistry
 	}
 
 	logrus.Info("registering proxy routes")
@@ -71,7 +71,7 @@ func StartServer(config *config.Config) error {
 	return server.Start(config, e)
 }
 
-func NewServer(config config.Proxy, cache cache.Cache, registrar auth.SessionRegistry) (*Server, error) {
+func NewServer(config config.Proxy, cache cache.Cache, registry auth.SessionRegistry) (*Server, error) {
 	targetFilters, err := parseTargetFilters(config.Policies)
 	if err != nil {
 		return nil, err
@@ -82,23 +82,23 @@ func NewServer(config config.Proxy, cache cache.Cache, registrar auth.SessionReg
 		return nil, err
 	}
 
-	server := &Server{
-		sessionRegistrar: registrar,
-		sessions:         cache,
-		policy:           config.Policies,
-		targetFilters:    targetFilters,
-		checksum:         checksum,
+	s := &Server{
+		sessionRegistry: registry,
+		sessions:        cache,
+		policy:          config.Policies,
+		targetFilters:   targetFilters,
+		checksum:        checksum,
 	}
 
-	return server, nil
+	return s, nil
 }
 
 type Server struct {
-	sessionRegistrar auth.SessionRegistry
-	sessions         cache.Cache
-	policy           map[string]config.Policy
-	targetFilters    map[string][]TargetFilter
-	checksum         string
+	sessionRegistry auth.SessionRegistry
+	sessions        cache.Cache
+	policy          map[string]config.Policy
+	targetFilters   map[string][]TargetFilter
+	checksum        string
 }
 
 type session struct {
@@ -154,7 +154,7 @@ func (s *Server) checkSessionToken(c echo.Context) error {
 		return err
 	}
 
-	response, err := s.sessionRegistrar.CheckSessionToken(&req)
+	response, err := s.sessionRegistry.CheckSessionToken(&req)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.
 	}
 
 	privateKey := se.PrivateKey
-	publicKey := s.sessionRegistrar.GetPublicKey()
+	publicKey := s.sessionRegistry.GetPublicKey()
 
 	var u = &api.SessionToken{}
 	if err := privateKey.OpenBase58(publicKey, auth, u); err != nil {
@@ -251,7 +251,7 @@ func (s *Server) registerSession(id, key, authToken, target string) (*api.Sessio
 		Checksum:   s.checksum,
 	}
 
-	return s.sessionRegistrar.RegisterSession(&request)
+	return s.sessionRegistry.RegisterSession(&request)
 }
 
 func (s *Server) validateRolesAndTarget(roles []string, target string) bool {

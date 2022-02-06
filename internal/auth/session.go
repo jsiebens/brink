@@ -18,7 +18,7 @@ type SessionRegistry interface {
 	CheckSessionToken(request *api.SessionTokenRequest) (*api.SessionTokenResponse, error)
 }
 
-func NewRemoteSessionRegistrar(config config.Auth) (SessionRegistry, error) {
+func NewRemoteSessionRegistry(config config.Auth) (SessionRegistry, error) {
 	url, err := util.NormalizeHttpUrl(config.RemoteServer)
 	if err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func NewRemoteSessionRegistrar(config config.Auth) (SessionRegistry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &remoteSessionRegistrar{
+	return &remoteSessionRegistry{
 		client:            resty.New(),
 		authServerBaseUrl: url,
 		remotePublicKey:   *publicKey,
@@ -40,7 +40,7 @@ func NewRemoteSessionRegistrar(config config.Auth) (SessionRegistry, error) {
 	}, nil
 }
 
-type remoteSessionRegistrar struct {
+type remoteSessionRegistry struct {
 	client            *resty.Client
 	authServerBaseUrl string
 	remotePublicKey   key.PublicKey
@@ -49,11 +49,11 @@ type remoteSessionRegistrar struct {
 	localPublicKey  string
 }
 
-func (r *remoteSessionRegistrar) GetPublicKey() key.PublicKey {
+func (r *remoteSessionRegistry) GetPublicKey() key.PublicKey {
 	return r.remotePublicKey
 }
 
-func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionTokenResponse, error) {
+func (r *remoteSessionRegistry) RegisterSession(req *api.RegisterSessionRequest) (*api.SessionTokenResponse, error) {
 	token, err := r.localPrivateKey.SealBase58(r.remotePublicKey, &api.Token{ExpirationTime: time.Now().UTC().Add(5 * time.Minute)})
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func (r *remoteSessionRegistrar) RegisterSession(req *api.RegisterSessionRequest
 	return &result, nil
 }
 
-func (r *remoteSessionRegistrar) CheckSessionToken(req *api.SessionTokenRequest) (*api.SessionTokenResponse, error) {
+func (r *remoteSessionRegistry) CheckSessionToken(req *api.SessionTokenRequest) (*api.SessionTokenResponse, error) {
 	token, err := r.localPrivateKey.SealBase58(r.remotePublicKey, &api.Token{ExpirationTime: time.Now().UTC().Add(5 * time.Minute)})
 	if err != nil {
 		return nil, err
