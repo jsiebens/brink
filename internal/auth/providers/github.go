@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/google/go-github/v39/github"
 	"github.com/jsiebens/brink/internal/config"
@@ -24,6 +25,15 @@ type GitHubProvider struct {
 	clientID     string
 	clientSecret string
 	scopes       []string
+}
+
+func hasGitHubUserEmailScope(scopes []string) bool {
+	for _, s := range scopes {
+		if s == "user:email" {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *GitHubProvider) GetLoginURL(redirectURI, state string) string {
@@ -62,6 +72,13 @@ func (p *GitHubProvider) Exchange(redirectURI, code string) (*Identity, error) {
 		return nil, err
 	}
 
+	if safeNilToVal(user.Email) == "" && hasGitHubUserEmailScope(p.scopes) {
+		email, err := p.getEmail(ctx, client)
+		if err == nil {
+			user.Email = &email
+		}
+	}
+
 	var raw = make(map[string]interface{})
 
 	decoderConfig := &mapstructure.DecoderConfig{
@@ -86,7 +103,8 @@ func (p *GitHubProvider) Exchange(redirectURI, code string) (*Identity, error) {
 
 	return &Identity{
 		UserID:   strconv.FormatInt(*user.ID, 10),
-		Username: *user.Login,
+		Username: safeNilToVal(user.Login),
+		Email:    safeNilToVal(user.Email),
 		Attr: map[string]interface{}{
 			"provider":      "github",
 			"user":          raw,
@@ -94,6 +112,13 @@ func (p *GitHubProvider) Exchange(redirectURI, code string) (*Identity, error) {
 			"organizations": orgs,
 		},
 	}, nil
+}
+
+func safeNilToVal(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
 }
 
 func (p *GitHubProvider) ExchangeIDToken(rawIdToken string) (*Identity, error) {
@@ -142,4 +167,25 @@ func (p *GitHubProvider) getOrganizations(ctx context.Context, client *github.Cl
 		}
 	}
 	return result, nil
+}
+
+func (p *GitHubProvider) getEmail(ctx context.Context, client *github.Client) (string, error) {
+	var page = 0
+	for {
+		emails, response, err := client.Users.ListEmails(ctx, &github.ListOptions{Page: page, PerPage: 100})
+		if err != nil {
+			return "", err
+		}
+		for _, e := range emails {
+			if *e.Primary && *e.Verified {
+				return *e.Email, nil
+			}
+		}
+		if response.NextPage == 0 {
+			break
+		} else {
+			page = response.NextPage
+		}
+	}
+	return "", errors.New("github: user has no verified, primary email")
 }
