@@ -3,6 +3,9 @@ name: ci
 on:
   pull_request:
 
+permissions:
+  id-token: write
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -22,6 +25,8 @@ jobs:
       - name: Tests
         run: |
           go test ./...
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v2.0.0
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v2
         with:
