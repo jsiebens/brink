@@ -1,6 +1,6 @@
 module github.com/jsiebens/brink
 
-go 1.17
+go 1.18
 
 replace github.com/rancher/remotedialer => github.com/jsiebens/remotedialer v0.2.6-0.20220209195211-a197b2a8980a
 
