@@ -116,7 +116,8 @@ type Provider struct {
 }
 
 type Proxy struct {
-	Policies map[string]Policy `yaml:"policies"`
+	PrivateKey string            `yaml:"private_key"`
+	Policies   map[string]Policy `yaml:"policies"`
 }
 
 type Policy struct {

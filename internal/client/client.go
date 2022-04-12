@@ -8,6 +8,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/gorilla/websocket"
 	"github.com/jsiebens/brink/internal/api"
+	"github.com/jsiebens/brink/internal/key"
 	"github.com/jsiebens/brink/internal/util"
 	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
@@ -48,11 +49,6 @@ func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error
 		return nil, err
 	}
 
-	websocketBaseUrl, err := util.NormalizeWsUrl(proxy)
-	if err != nil {
-		return nil, err
-	}
-
 	if caFile != "" {
 		caCert, err := ioutil.ReadFile(caFile)
 		if err != nil {
@@ -70,34 +66,48 @@ func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error
 		InsecureSkipVerify: insecureSkipVerify,
 	}
 
-	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	proxyPublicKey, err := getProxyPublicKey(context.Background(), resty.NewWithClient(&http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}), targetBaseUrl)
+	if err != nil {
+		return nil, err
+	}
 
-	dialer := &websocket.Dialer{
+	clientPrivateKey, err := key.GeneratePrivateKey()
+	if err != nil {
+		return nil, err
+	}
+
+	dialer := NewDialer(*proxyPublicKey, *clientPrivateKey, targetBaseUrl, tlsConfig)
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext:     dialer,
+			TLSClientConfig: tlsConfig,
+		},
+	}
+
+	websocketDialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: remotedialer.HandshakeTimeOut,
 		TLSClientConfig:  tlsConfig,
+		NetDialContext:   dialer,
 	}
 
 	c := &Client{
-		httpClient:       resty.NewWithClient(client),
-		dialer:           dialer,
-		httpBaseUrl:      targetBaseUrl,
-		websocketBaseUrl: websocketBaseUrl,
+		httpClient: resty.NewWithClient(client),
+		dialer:     websocketDialer,
 	}
 
 	return c, nil
 }
 
 type Client struct {
-	httpClient       *resty.Client
-	dialer           *websocket.Dialer
-	forwarder        *Forwarder
-	httpBaseUrl      string
-	websocketBaseUrl string
+	httpClient *resty.Client
+	dialer     *websocket.Dialer
+	forwarder  *Forwarder
+	target     string
 }
 
 func (c *Client) authenticate(ctx context.Context) error {
-	_ = DeleteAuthToken(c.httpBaseUrl)
+	_ = DeleteAuthToken(c.target)
 
 	sn, err := c.createSession(ctx, "")
 	if err != nil {
@@ -126,7 +136,7 @@ func (c *Client) authenticate(ctx context.Context) error {
 		authToken = sn.AuthToken
 	}
 
-	err = StoreAuthToken(c.httpBaseUrl, authToken)
+	err = StoreAuthToken(c.target, authToken)
 	if err != nil {
 		fmt.Println()
 		fmt.Printf("  Unable to store auth token in your system credential store: %s\n", err)
@@ -143,7 +153,7 @@ func (c *Client) start(ctx context.Context) error {
 		return err
 	}
 
-	currentAuthToken, storeAuthToken, _ := LoadAuthToken(c.httpBaseUrl)
+	currentAuthToken, storeAuthToken, _ := LoadAuthToken(c.target)
 
 	sn, err := c.createSession(ctx, currentAuthToken)
 	if err != nil {
@@ -173,7 +183,7 @@ func (c *Client) start(ctx context.Context) error {
 		sessionToken = sn.SessionToken
 	}
 
-	_ = storeAuthToken(c.httpBaseUrl, authToken)
+	_ = storeAuthToken(c.target, authToken)
 
 	if err := c.connect(ctx, sn.SessionId, sessionToken); err != nil {
 		return err
@@ -199,7 +209,7 @@ func (c *Client) createSession(ctx context.Context, authToken string) (*api.Sess
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).
-		Post(c.httpBaseUrl + "/p/session")
+		Post("http://internal/p/session")
 
 	if err != nil {
 		return nil, err
@@ -241,7 +251,7 @@ func (c *Client) checkSessionToken(ctx context.Context, sessionId string) (*api.
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).
-		Post(c.httpBaseUrl + "/p/token")
+		Post("http://internal/p/token")
 
 	if err != nil {
 		return nil, err
@@ -259,7 +269,7 @@ func (c *Client) connect(ctx context.Context, id, token string) error {
 	headers.Add(api.IdHeader, id)
 	headers.Add(api.AuthHeader, token)
 
-	return c.connectToProxy(ctx, c.websocketBaseUrl+"/p/connect", headers)
+	return c.connectToProxy(ctx, "ws://internal/p/connect", headers)
 }
 
 func (c *Client) connectToProxy(rootCtx context.Context, proxyURL string, headers http.Header) error {
@@ -317,4 +327,16 @@ type serverError struct {
 
 func (e serverError) Error() string {
 	return fmt.Sprintf("unexpected status code: %d - %s", e.code, e.message)
+}
+
+func getProxyPublicKey(ctx context.Context, client *resty.Client, httpBaseUrl string) (*key.PublicKey, error) {
+	resp, err := client.R().
+		SetContext(ctx).
+		Get(httpBaseUrl + "/p/key")
+
+	if err != nil {
+		return nil, err
+	}
+
+	return key.ParsePublicKey(resp.String())
 }

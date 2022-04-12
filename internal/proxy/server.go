@@ -12,8 +12,10 @@ import (
 	"github.com/jsiebens/brink/internal/util"
 	"github.com/jsiebens/brink/internal/version"
 	"github.com/labstack/echo/v4"
+	stream "github.com/nknorg/encrypted-stream"
 	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -72,6 +74,22 @@ func StartServer(config *config.Config) error {
 }
 
 func NewServer(config config.Proxy, cache cache.Cache, registry auth.SessionRegistry) (*Server, error) {
+	var privateKey *key.PrivateKey
+
+	if config.PrivateKey == "" {
+		pkey, err := key.GeneratePrivateKey()
+		if err != nil {
+			return nil, err
+		}
+		privateKey = pkey
+	} else {
+		pkey, err := key.ParsePrivateKey(config.PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+		privateKey = pkey
+	}
+
 	targetFilters, err := parseTargetFilters(config.Policies)
 	if err != nil {
 		return nil, err
@@ -83,6 +101,7 @@ func NewServer(config config.Proxy, cache cache.Cache, registry auth.SessionRegi
 	}
 
 	s := &Server{
+		privateKey:      *privateKey,
 		sessionRegistry: registry,
 		sessions:        cache,
 		policy:          config.Policies,
@@ -90,10 +109,20 @@ func NewServer(config config.Proxy, cache cache.Cache, registry auth.SessionRegi
 		checksum:        checksum,
 	}
 
+	internalHandler := echo.New()
+	internalHandler.HideBanner = true
+	internalHandler.HidePort = true
+	internalHandler.GET("/p/connect", s.proxy())
+	internalHandler.POST("/p/session", s.createSession)
+	internalHandler.POST("/p/token", s.checkSessionToken)
+	s.internalHandler = internalHandler
+
 	return s, nil
 }
 
 type Server struct {
+	privateKey      key.PrivateKey
+	internalHandler http.Handler
 	sessionRegistry auth.SessionRegistry
 	sessions        cache.Cache
 	policy          map[string]config.Policy
@@ -107,9 +136,23 @@ type session struct {
 }
 
 func (s *Server) RegisterRoutes(e *echo.Echo) {
-	e.GET("/p/connect", s.proxy())
-	e.POST("/p/session", s.createSession)
-	e.POST("/p/token", s.checkSessionToken)
+	e.GET("/p/key", s.key)
+	e.GET("/p/upgrade", s.upgrade)
+}
+
+func (s *Server) key(c echo.Context) error {
+	return c.String(http.StatusOK, s.privateKey.Public().String())
+}
+
+func (s *Server) upgrade(c echo.Context) error {
+	conn, err := s.acceptHTTP(c.Response(), c.Request())
+	if err != nil {
+		return err
+	}
+
+	is := http.Server{}
+	is.Handler = s.internalHandler
+	return is.Serve(util.NewOneConnListener(conn, nil))
 }
 
 func (s *Server) createSession(c echo.Context) error {
@@ -294,4 +337,49 @@ func (s *Server) validateTarget(target string) bool {
 	}
 
 	return false
+}
+
+func (s *Server) acceptHTTP(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
+	next := r.Header.Get("Upgrade")
+	if next == "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "missing next protocol")
+	}
+	if next != api.UpgradeHeaderValue {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "unknown next protocol")
+	}
+
+	rawKey := r.Header.Get(api.HandshakeHeaderName)
+	if rawKey == "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "missing key header")
+	}
+
+	clientPublicKey, err := key.ParsePublicKey(rawKey)
+	if err != nil {
+		return nil, err
+	}
+
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "make request over HTTP/1")
+	}
+
+	w.Header().Set("Upgrade", api.UpgradeHeaderValue)
+	w.Header().Set("Connection", "upgrade")
+	w.WriteHeader(http.StatusSwitchingProtocols)
+
+	conn, brw, err := hijacker.Hijack()
+	if err != nil {
+		return nil, fmt.Errorf("hijacking client connection: %w", err)
+	}
+
+	if err := brw.Flush(); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("flushing hijacked HTTP buffer: %w", err)
+	}
+
+	return stream.NewEncryptedStream(conn, &stream.Config{
+		Cipher:          key.NewBoxCipher(s.privateKey, *clientPublicKey),
+		SequentialNonce: false, // only when key is unique for every stream
+		Initiator:       false, // only on the dialer side
+	})
 }

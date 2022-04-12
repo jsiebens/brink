@@ -7,6 +7,9 @@ const (
 	AuthHeader  = "x-brink-auth"
 	KeyHeader   = "x-brink-api-key"
 	TokenHeader = "x-brink-api-token"
+
+	UpgradeHeaderValue  = "x-brink-protocol"
+	HandshakeHeaderName = "x-brink-handshake-key"
 )
 
 type CreateSessionRequest struct {

@@ -22,6 +22,7 @@ require (
 	github.com/mitchellh/pointerstructure v1.2.1
 	github.com/mr-tron/base58 v1.2.0
 	github.com/muesli/coral v1.0.0
+	github.com/nknorg/encrypted-stream v1.0.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/rancher/remotedialer v0.2.6-0.20220107175045-b2d660c628d5
 	github.com/sirupsen/logrus v1.8.1
@@ -45,6 +46,7 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
+	github.com/imdario/mergo v0.3.9 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/keybase/go-keychain v0.0.0-20190712205309-48d3d31d256d // indirect
 	github.com/kr/pretty v0.2.0 // indirect
