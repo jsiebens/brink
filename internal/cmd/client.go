@@ -18,12 +18,14 @@ var (
 	proxyAddrFlag string
 	tlsSkipVerify bool
 	caFile        string
+	showQR        bool
 )
 
 func registerProxyFlags(command *coral.Command) {
 	command.Flags().StringVarP(&proxyAddrFlag, "proxy-addr", "r", "", fmt.Sprintf("Addr of the Brink proxy. This can also be specified via the environment variable %s.", BrinkProxyAddr))
 	command.Flags().BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "Disable verification of TLS certificates, highly discouraged as it decreases the security of data transmissions.")
 	command.Flags().StringVar(&caFile, "ca-file", "", "Path on the local disk to a single PEM-encoded CA certificate to verify the proxy or server SSL certificate.")
+	command.Flags().BoolVar(&showQR, "qr", false, "Show QR code for login URLs")
 }
 
 func connectCommand() *coral.Command {
@@ -70,20 +72,20 @@ func connectCommand() *coral.Command {
 		}
 
 		if listenOnStdin {
-			return client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, client.StartNC)
+			return client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, showQR, client.StartNC)
 		}
 
 		if execCommand != "" {
 			onConnect, result := execOnConnect(execCommand, noArgs, args, cancelFunc)
 
-			if err := client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, onConnect); err != nil {
+			if err := client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, showQR, onConnect); err != nil {
 				return err
 			}
 
 			return <-result
 		}
 
-		return client.StartClient(cancelCtx, proxyAddr, listenPort, targetAddr, caFile, tlsSkipVerify, client.PrintListenerInfo)
+		return client.StartClient(cancelCtx, proxyAddr, listenPort, targetAddr, caFile, tlsSkipVerify, showQR, client.PrintListenerInfo)
 	}
 
 	return command
@@ -135,7 +137,7 @@ func sshCommand() *coral.Command {
 
 		onConnect, result := execOnConnect("ssh", buildArgs, args, cancelFunc)
 
-		if err := client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, onConnect); err != nil {
+		if err := client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, showQR, onConnect); err != nil {
 			return err
 		}
 

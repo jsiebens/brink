@@ -67,7 +67,7 @@ func isValidUrl(toTest string) (bool, *url.URL) {
 }
 
 func GenerateSessionId() string {
-	id := new([24]byte)
+	id := new([6]byte)
 	_, err := io.ReadFull(rand.Reader, id[:])
 	if err != nil {
 		panic(err)

@@ -12,21 +12,22 @@ import (
 	"github.com/jsiebens/brink/internal/util"
 	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
+	"github.com/skip2/go-qrcode"
 	"io/ioutil"
 	"net/http"
 	"time"
 )
 
-func Authenticate(ctx context.Context, proxy string, caFile string, insecureSkipVerify bool) error {
-	clt, err := createClient(proxy, caFile, insecureSkipVerify)
+func Authenticate(ctx context.Context, proxy string, caFile string, insecureSkipVerify bool, showQR bool) error {
+	clt, err := createClient(proxy, caFile, insecureSkipVerify, showQR)
 	if err != nil {
 		return err
 	}
 	return clt.authenticate(ctx)
 }
 
-func StartClient(ctx context.Context, proxy string, listenPort uint64, target string, caFile string, insecureSkipVerify bool, onConnect OnConnect) error {
-	clt, err := createClient(proxy, caFile, insecureSkipVerify)
+func StartClient(ctx context.Context, proxy string, listenPort uint64, target string, caFile string, insecureSkipVerify bool, showQR bool, onConnect OnConnect) error {
+	clt, err := createClient(proxy, caFile, insecureSkipVerify, showQR)
 	if err != nil {
 		return err
 	}
@@ -41,7 +42,7 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 	return clt.start(ctx)
 }
 
-func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error) {
+func createClient(proxy, caFile string, insecureSkipVerify bool, showQR bool) (*Client, error) {
 	var caCertPool *x509.CertPool
 
 	targetBaseUrl, err := util.NormalizeHttpUrl(proxy)
@@ -94,6 +95,7 @@ func createClient(proxy, caFile string, insecureSkipVerify bool) (*Client, error
 	c := &Client{
 		httpClient: resty.NewWithClient(client),
 		dialer:     websocketDialer,
+		showQR:     showQR,
 	}
 
 	return c, nil
@@ -104,6 +106,7 @@ type Client struct {
 	dialer     *websocket.Dialer
 	forwarder  *Forwarder
 	target     string
+	showQR     bool
 }
 
 func (c *Client) authenticate(ctx context.Context) error {
@@ -117,16 +120,7 @@ func (c *Client) authenticate(ctx context.Context) error {
 	var authToken string
 
 	if sn.AuthUrl != "" {
-		err = util.OpenURL(sn.AuthUrl)
-		if err != nil {
-			fmt.Println()
-			fmt.Println("To authenticate, visit:")
-			fmt.Println()
-			fmt.Printf("  %s", sn.AuthUrl)
-			fmt.Println()
-			fmt.Println()
-		}
-
+		c.openOrShowAuthUrl(sn)
 		authToken, _, err = c.pollSessionToken(ctx, sn.SessionId)
 		if err != nil {
 			return err
@@ -164,16 +158,7 @@ func (c *Client) start(ctx context.Context) error {
 	var authToken string
 
 	if sn.AuthUrl != "" {
-		err = util.OpenURL(sn.AuthUrl)
-		if err != nil {
-			fmt.Println()
-			fmt.Println("To authenticate, visit:")
-			fmt.Println()
-			fmt.Printf("  %s", sn.AuthUrl)
-			fmt.Println()
-			fmt.Println()
-		}
-
+		c.openOrShowAuthUrl(sn)
 		authToken, sessionToken, err = c.pollSessionToken(ctx, sn.SessionId)
 		if err != nil {
 			return err
@@ -312,6 +297,28 @@ func (c *Client) connectToProxy(rootCtx context.Context, proxyURL string, header
 		return nil
 	case err := <-result:
 		return err
+	}
+}
+
+func (c *Client) openOrShowAuthUrl(sn *api.SessionTokenResponse) {
+	if c.showQR || util.OpenURL(sn.AuthUrl) != nil {
+		fmt.Println()
+		fmt.Println("To authenticate, visit:")
+		fmt.Println()
+		fmt.Printf("  %s", sn.AuthUrl)
+		fmt.Println()
+
+		if c.showQR {
+			fmt.Println()
+			code, err := qrcode.New(sn.AuthUrl, qrcode.Medium)
+			if err != nil {
+				fmt.Printf("  QR code error: %v", err)
+			} else {
+				fmt.Println(code.ToString(false))
+			}
+		}
+
+		fmt.Println()
 	}
 }
 
