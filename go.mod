@@ -2,7 +2,7 @@ module github.com/jsiebens/brink
 
 go 1.18
 
-replace github.com/rancher/remotedialer => github.com/jsiebens/remotedialer v0.2.6-0.20220209195211-a197b2a8980a
+replace github.com/rancher/remotedialer => github.com/jsiebens/remotedialer v0.2.6-0.20220422060621-08ae2895de0b
 
 require (
 	github.com/99designs/keyring v1.1.6
@@ -57,7 +57,7 @@ require (
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.11.0 // indirect
+	github.com/prometheus/client_golang v1.11.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect

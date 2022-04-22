@@ -207,21 +207,41 @@ func (s *Server) checkSessionToken(c echo.Context) error {
 
 func (s *Server) proxy() echo.HandlerFunc {
 	rd := remotedialer.New(s.authorizeClient, remotedialer.DefaultErrorWriter)
-	return echo.WrapHandler(rd)
+	return func(context echo.Context) error {
+		req := context.Request()
+		clientId := req.Header.Get(api.IdHeader)
+		clientAuth := req.Header.Get(api.AuthHeader)
+
+		if clientId == "" || clientAuth == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "missing id and/or auth header")
+		}
+
+		logrus.
+			WithField("_cid", clientId).
+			Info("Client connected")
+
+		rd.ServeHTTP(context.Response(), context.Request())
+
+		logrus.
+			WithField("_cid", clientId).
+			Info("Client disconnected")
+
+		return nil
+	}
 }
 
 func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.ConnectAuthorizer, error) {
-	id := req.Header.Get(api.IdHeader)
-	auth := req.Header.Get(api.AuthHeader)
+	clientId := req.Header.Get(api.IdHeader)
+	clientAuth := req.Header.Get(api.AuthHeader)
 
-	if id == "" || auth == "" {
+	if clientId == "" || clientAuth == "" {
 		return "", false, nil, fmt.Errorf("missing id and/or auth header")
 	}
 
 	var se = session{}
 
-	defer s.sessions.Delete(id)
-	if ok, err := s.sessions.Get(id, &se); err != nil || !ok {
+	defer s.sessions.Delete(clientId)
+	if ok, err := s.sessions.Get(clientId, &se); err != nil || !ok {
 		return "", false, nil, nil
 	}
 
@@ -229,7 +249,7 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.
 	publicKey := s.sessionRegistry.GetPublicKey()
 
 	var u = &api.SessionToken{}
-	if err := privateKey.OpenBase58(publicKey, auth, u); err != nil {
+	if err := privateKey.OpenBase58(publicKey, clientAuth, u); err != nil {
 		return "", false, nil, fmt.Errorf("invalid token")
 	}
 
@@ -244,29 +264,26 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.
 	}
 
 	logrus.
+		WithField("_cid", clientId).
 		WithField("id", u.UserID).
 		WithField("name", u.Username).
 		WithField("email", u.Email).
 		Info("Client authorized")
 
-	return id, true, s.connectAuthorizer(u), nil
+	return clientId, true, s.connectAuthorizer(clientId, u), nil
 }
 
-func (s *Server) connectAuthorizer(token *api.SessionToken) remotedialer.ConnectAuthorizer {
+func (s *Server) connectAuthorizer(clientId string, token *api.SessionToken) remotedialer.ConnectAuthorizer {
 	return func(proto, address string) bool {
 		result := token.Target == address
 
 		if result {
 			logrus.
-				WithField("id", token.UserID).
-				WithField("name", token.Username).
-				WithField("email", token.Email).
+				WithField("_cid", clientId).
 				WithField("addr", address).Info("Connection allowed")
 		} else {
 			logrus.
-				WithField("id", token.UserID).
-				WithField("name", token.Username).
-				WithField("email", token.Email).
+				WithField("_cid", clientId).
 				WithField("addr", address).Info("Connection declined")
 		}
 
