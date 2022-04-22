@@ -2,7 +2,7 @@ version: '3.8'
 services:
 
   dex:
-    image: dexidp/dex
+    image: dexidp/dex:v2.31.1
     ports:
       - "5556:5556"
     volumes:
@@ -16,7 +16,7 @@ services:
 
   brink:
     restart: unless-stopped
-    image: ghcr.io/jsiebens/brink:0.2.0
+    image: ghcr.io/jsiebens/brink:latest
     command: [ 'server', 'proxy', '--config', '/config.yaml' ]
     ports:
       - "7000:7000"

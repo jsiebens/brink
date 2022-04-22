@@ -51,7 +51,7 @@ Start a brink server instanc:
 
 ```shell
 $ brink server proxy --config config.yaml
-INFO[0000] Starting brink proxy server. Version 0.2.0 - 62951e34b49a1a7595076b29e433ae9fdb6688be 
+INFO[0000] Starting brink proxy server. Version 0.6.0 - 83c874a 
 INFO[0000] registering oidc routes                      
 INFO[0000] registering proxy routes                     
 INFO[0000] server listening on :7000
