@@ -23,34 +23,6 @@ func StripScheme(input string) string {
 	return ""
 }
 
-func NormalizeWsUrl(input string) (string, error) {
-
-	normalizeUrl := func(u *url.URL) (string, error) {
-		switch u.Scheme {
-		case "http":
-			u.Scheme = "ws"
-		case "https":
-			u.Scheme = "wss"
-		case "wss", "ws":
-		default:
-			u.Scheme = "wss"
-		}
-
-		return u.String(), nil
-	}
-
-	ok, u := isValidUrl(input)
-	if ok {
-		return normalizeUrl(u)
-	}
-	ok, u = isValidUrl("wss://" + input)
-	if ok {
-		return normalizeUrl(u)
-	}
-
-	return "", fmt.Errorf("invalid url [%s]", input)
-}
-
 func NormalizeHttpUrl(input string) (string, error) {
 
 	normalizeUrl := func(u *url.URL) (string, error) {
