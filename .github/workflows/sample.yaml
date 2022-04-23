@@ -1,0 +1,32 @@
+name: GitHub Action Sample
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download brink
+        shell: bash
+        id: download
+        run: |
+          curl -sLSf https://github.com/jsiebens/brink/releases/download/v0.6.0/brink_0.6.0_linux_amd64.tar.gz -o ./brink_0.6.0_linux_amd64.tar.gz
+          tar -xvzf ./brink_0.6.0_linux_amd64.tar.gz
+          sudo mv ./brink /usr/bin/
+
+      - name: Start brink
+        shell: bash
+        env:
+          BRINK_PROXY_ADDR: brink-gh.j5s.io
+          BRINK_TARGET_ADDR: echo:80
+          BRINK_PORT: 8080
+        run: |
+          OIDC_TOKEN=$(curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=brink" -H "User-Agent: actions/oidc-client" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+          BRINK_AUTH_TOKEN=$(echo $OIDC_TOKEN | jq -j '.value') brink connect -p ${BRINK_PORT} &
+
+      - name: Test brink
+        run: curl -s localhost:8080
