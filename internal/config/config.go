@@ -8,6 +8,7 @@ import (
 
 const (
 	listenAddrKey                   = "BRINK_LISTEN_ADDR"
+	metricsListenAddrKey            = "BRINK_METRICS_LISTEN_ADDR"
 	tlsDisableKey                   = "BRINK_TLS_DISABLE"
 	tlsCertFileKey                  = "BRINK_TLS_CERT_FILE"
 	tlsKeyFileKey                   = "BRINK_TLS_KEY_FILE"
@@ -50,6 +51,7 @@ func LoadConfig(path string) (*Config, error) {
 func defaultConfig() *Config {
 	return &Config{
 		ListenAddr: getString(listenAddrKey, ":7000"),
+		Metrics:    Metrics{ListenAddr: getString(metricsListenAddrKey, ":7071")},
 		Tls: Tls{
 			Disable:  getBool(tlsDisableKey, false),
 			CertFile: getString(tlsCertFileKey, ""),
@@ -79,11 +81,12 @@ func defaultConfig() *Config {
 }
 
 type Config struct {
-	ListenAddr string `yaml:"listen_addr"`
-	Tls        Tls    `yaml:"tls"`
-	Cache      Cache  `yaml:"cache"`
-	Auth       Auth   `yaml:"auth"`
-	Proxy      Proxy  `yaml:"proxy"`
+	ListenAddr string  `yaml:"listen_addr"`
+	Metrics    Metrics `yaml:"metrics"`
+	Tls        Tls     `yaml:"tls"`
+	Cache      Cache   `yaml:"cache"`
+	Auth       Auth    `yaml:"auth"`
+	Proxy      Proxy   `yaml:"proxy"`
 }
 
 type Cache struct {
@@ -91,6 +94,10 @@ type Cache struct {
 	RedisAddr     string `yaml:"redis_addr"`
 	RedisDB       int    `yaml:"redis_db"`
 	RedisPassword string `yaml:"redis_password"`
+}
+
+type Metrics struct {
+	ListenAddr string `yaml:"listen_addr"`
 }
 
 type Tls struct {

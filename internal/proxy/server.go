@@ -8,6 +8,7 @@ import (
 	"github.com/jsiebens/brink/internal/cache"
 	"github.com/jsiebens/brink/internal/config"
 	"github.com/jsiebens/brink/internal/key"
+	"github.com/jsiebens/brink/internal/mon"
 	"github.com/jsiebens/brink/internal/server"
 	"github.com/jsiebens/brink/internal/util"
 	"github.com/jsiebens/brink/internal/version"
@@ -112,6 +113,7 @@ func NewServer(config config.Proxy, cache cache.Cache, registry auth.SessionRegi
 	internalHandler := echo.New()
 	internalHandler.HideBanner = true
 	internalHandler.HidePort = true
+	internalHandler.Use(mon.Middleware())
 	internalHandler.GET("/p/connect", s.proxy())
 	internalHandler.POST("/p/session", s.createSession)
 	internalHandler.POST("/p/token", s.checkSessionToken)
