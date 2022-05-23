@@ -38,7 +38,7 @@ func loginCommand() *coral.Command {
 			return fmt.Errorf("required flag --proxy-addr is missing")
 		}
 
-		return client.Authenticate(cmd.Context(), proxyAddr, caFile, tlsSkipVerify, showQR)
+		return client.Authenticate(cmd.Context(), proxyAddr, caFile, tlsSkipVerify, noBrowser, showQR)
 	}
 
 	return command

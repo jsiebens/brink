@@ -18,16 +18,16 @@ import (
 	"time"
 )
 
-func Authenticate(ctx context.Context, proxy string, caFile string, insecureSkipVerify bool, showQR bool) error {
-	clt, err := createClient(proxy, caFile, insecureSkipVerify, showQR)
+func Authenticate(ctx context.Context, proxy string, caFile string, insecureSkipVerify bool, noBrowser, showQR bool) error {
+	clt, err := createClient(proxy, caFile, insecureSkipVerify, noBrowser, showQR)
 	if err != nil {
 		return err
 	}
 	return clt.authenticate(ctx)
 }
 
-func StartClient(ctx context.Context, proxy string, listenPort uint64, target string, caFile string, insecureSkipVerify bool, showQR bool, onConnect OnConnect) error {
-	clt, err := createClient(proxy, caFile, insecureSkipVerify, showQR)
+func StartClient(ctx context.Context, proxy string, listenPort uint64, target string, caFile string, insecureSkipVerify bool, noBrowser, showQR bool, onConnect OnConnect) error {
+	clt, err := createClient(proxy, caFile, insecureSkipVerify, noBrowser, showQR)
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 	return clt.start(ctx)
 }
 
-func createClient(proxy, caFile string, insecureSkipVerify bool, showQR bool) (*Client, error) {
+func createClient(proxy, caFile string, insecureSkipVerify bool, noBrowser, showQR bool) (*Client, error) {
 	var caCertPool *x509.CertPool
 
 	targetBaseUrl, err := util.NormalizeHttpUrl(proxy)
@@ -95,6 +95,7 @@ func createClient(proxy, caFile string, insecureSkipVerify bool, showQR bool) (*
 	c := &Client{
 		httpClient: resty.NewWithClient(client),
 		dialer:     websocketDialer,
+		noBrowser:  noBrowser,
 		showQR:     showQR,
 	}
 
@@ -106,6 +107,7 @@ type Client struct {
 	dialer     *websocket.Dialer
 	forwarder  *Forwarder
 	target     string
+	noBrowser  bool
 	showQR     bool
 }
 
@@ -301,7 +303,7 @@ func (c *Client) connectToProxy(rootCtx context.Context, proxyURL string, header
 }
 
 func (c *Client) openOrShowAuthUrl(sn *api.SessionTokenResponse) {
-	if c.showQR || util.OpenURL(sn.AuthUrl) != nil {
+	if c.noBrowser || c.showQR || util.OpenURL(sn.AuthUrl) != nil {
 		fmt.Println()
 		fmt.Println("To authenticate, visit:")
 		fmt.Println()
