@@ -94,6 +94,7 @@ func createClient(proxy, caFile string, insecureSkipVerify bool, noBrowser, show
 
 	c := &Client{
 		httpClient: resty.NewWithClient(client),
+		target:     targetBaseUrl,
 		dialer:     websocketDialer,
 		noBrowser:  noBrowser,
 		showQR:     showQR,
