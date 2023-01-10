@@ -2,19 +2,18 @@ package proxy
 
 import (
 	"fmt"
+	"github.com/hashicorp/yamux"
 	"github.com/jsiebens/brink/internal/api"
 	"github.com/jsiebens/brink/internal/auth"
 	"github.com/jsiebens/brink/internal/auth/templates"
 	"github.com/jsiebens/brink/internal/cache"
 	"github.com/jsiebens/brink/internal/config"
 	"github.com/jsiebens/brink/internal/key"
-	"github.com/jsiebens/brink/internal/mon"
 	"github.com/jsiebens/brink/internal/server"
 	"github.com/jsiebens/brink/internal/util"
 	"github.com/jsiebens/brink/internal/version"
 	"github.com/labstack/echo/v4"
 	stream "github.com/nknorg/encrypted-stream"
-	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
 	"net"
 	"net/http"
@@ -110,21 +109,11 @@ func NewServer(config config.Proxy, cache cache.Cache, registry auth.SessionRegi
 		checksum:        checksum,
 	}
 
-	internalHandler := echo.New()
-	internalHandler.HideBanner = true
-	internalHandler.HidePort = true
-	internalHandler.Use(mon.Middleware())
-	internalHandler.GET("/p/connect", s.proxy())
-	internalHandler.POST("/p/session", s.createSession)
-	internalHandler.POST("/p/token", s.checkSessionToken)
-	s.internalHandler = internalHandler
-
 	return s, nil
 }
 
 type Server struct {
 	privateKey      key.PrivateKey
-	internalHandler http.Handler
 	sessionRegistry auth.SessionRegistry
 	sessions        cache.Cache
 	policy          map[string]config.Policy
@@ -139,22 +128,13 @@ type session struct {
 
 func (s *Server) RegisterRoutes(e *echo.Echo) {
 	e.GET("/p/key", s.key)
-	e.GET("/p/upgrade", s.upgrade)
+	e.POST("/p/session", s.createSession)
+	e.POST("/p/token", s.checkSessionToken)
+	e.GET("/p/connect", s.connect)
 }
 
 func (s *Server) key(c echo.Context) error {
 	return c.String(http.StatusOK, s.privateKey.Public().String())
-}
-
-func (s *Server) upgrade(c echo.Context) error {
-	conn, err := s.acceptHTTP(c.Response(), c.Request())
-	if err != nil {
-		return err
-	}
-
-	is := http.Server{}
-	is.Handler = s.internalHandler
-	return is.Serve(util.NewOneConnListener(conn, nil))
 }
 
 func (s *Server) createSession(c echo.Context) error {
@@ -207,44 +187,21 @@ func (s *Server) checkSessionToken(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (s *Server) proxy() echo.HandlerFunc {
-	rd := remotedialer.New(s.authorizeClient, remotedialer.DefaultErrorWriter)
-	return func(context echo.Context) error {
-		req := context.Request()
-		clientId := req.Header.Get(api.IdHeader)
-		clientAuth := req.Header.Get(api.AuthHeader)
-
-		if clientId == "" || clientAuth == "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "missing id and/or auth header")
-		}
-
-		logrus.
-			WithField("_cid", clientId).
-			Info("Client connected")
-
-		rd.ServeHTTP(context.Response(), context.Request())
-
-		logrus.
-			WithField("_cid", clientId).
-			Info("Client disconnected")
-
-		return nil
-	}
-}
-
-func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.ConnectAuthorizer, error) {
+func (s *Server) connect(c echo.Context) error {
+	req := c.Request()
+	ctx := req.Context()
 	clientId := req.Header.Get(api.IdHeader)
 	clientAuth := req.Header.Get(api.AuthHeader)
 
 	if clientId == "" || clientAuth == "" {
-		return "", false, nil, fmt.Errorf("missing id and/or auth header")
+		return echo.NewHTTPError(http.StatusBadRequest, "missing id and/or auth header")
 	}
 
 	var se = session{}
 
 	defer s.sessions.Delete(clientId)
 	if ok, err := s.sessions.Get(clientId, &se); err != nil || !ok {
-		return "", false, nil, nil
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
 	}
 
 	privateKey := se.PrivateKey
@@ -252,17 +209,22 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.
 
 	var u = &api.SessionToken{}
 	if err := privateKey.OpenBase58(publicKey, clientAuth, u); err != nil {
-		return "", false, nil, fmt.Errorf("invalid token")
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
 	}
 
 	now := time.Now().UTC()
 
 	if now.After(u.ExpirationTime) || u.Checksum != s.checksum {
-		return "", false, nil, fmt.Errorf("token is expired")
+		return echo.NewHTTPError(http.StatusForbidden, "token is expired")
 	}
 
 	if !s.validateRolesAndTarget(u.Roles, u.Target) {
-		return "", false, nil, fmt.Errorf("access to target [%s] is denied", u.Target)
+		return echo.NewHTTPError(http.StatusForbidden)
+	}
+
+	conn, err := s.acceptHTTP(c.Response(), c.Request())
+	if err != nil {
+		return err
 	}
 
 	logrus.
@@ -270,27 +232,66 @@ func (s *Server) authorizeClient(req *http.Request) (string, bool, remotedialer.
 		WithField("id", u.UserID).
 		WithField("name", u.Username).
 		WithField("email", u.Email).
-		Info("Client authorized")
+		WithField("upstream", u.Target).
+		Info("client authorized")
 
-	return clientId, true, s.connectAuthorizer(clientId, u), nil
-}
-
-func (s *Server) connectAuthorizer(clientId string, token *api.SessionToken) remotedialer.ConnectAuthorizer {
-	return func(proto, address string) bool {
-		result := token.Target == address
-
-		if result {
-			logrus.
-				WithField("_cid", clientId).
-				WithField("addr", address).Info("Connection allowed")
-		} else {
-			logrus.
-				WithField("_cid", clientId).
-				WithField("addr", address).Info("Connection declined")
-		}
-
-		return result
+	// Setup server side of yamux
+	mux, err := yamux.Server(conn, nil)
+	if err != nil {
+		return err
 	}
+
+	go func() {
+		for {
+			src, err := mux.Accept()
+			if err != nil {
+				if !mux.IsClosed() {
+					logrus.Errorf("error accepting connection %s", err.Error())
+				}
+				return
+			}
+
+			go func(src net.Conn) {
+				id := util.GenerateSessionId()
+
+				defer src.Close()
+				dst, err := net.Dial("tcp", u.Target)
+				if err != nil {
+					logrus.
+						WithField("_cid", clientId).
+						WithField("_sid", id).
+						Errorf("error dialing %s %s", u.Target, err.Error())
+					return
+				}
+				defer dst.Close()
+
+				start := time.Now()
+				logrus.
+					WithField("_cid", clientId).
+					WithField("_sid", id).
+					Info("connection accepted")
+
+				util.Pipe(src, dst)
+
+				logrus.
+					WithField("_cid", clientId).
+					WithField("_sid", id).
+					WithField("duration", time.Since(start)).
+					Info("connection closed")
+			}(src)
+		}
+	}()
+
+	select {
+	case <-mux.CloseChan():
+	case <-ctx.Done():
+	}
+
+	logrus.
+		WithField("_cid", clientId).
+		Info("client disconnected")
+
+	return nil
 }
 
 func (s *Server) registerSession(id, key, authToken, target string) (*api.SessionTokenResponse, error) {

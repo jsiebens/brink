@@ -74,20 +74,20 @@ func connectCommand() *coral.Command {
 		}
 
 		if listenOnStdin {
-			return client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, noBrowser, showQR, client.StartNC)
+			return client.StartClient(cancelCtx, proxyAddr, "-", targetAddr, caFile, tlsSkipVerify, noBrowser, showQR, nil)
 		}
 
 		if execCommand != "" {
 			onConnect, result := execOnConnect(execCommand, noArgs, args, cancelFunc)
 
-			if err := client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, noBrowser, showQR, onConnect); err != nil {
+			if err := client.StartClient(cancelCtx, proxyAddr, fmt.Sprintf("127.0.0.1:%d", 0), targetAddr, caFile, tlsSkipVerify, noBrowser, showQR, onConnect); err != nil {
 				return err
 			}
 
 			return <-result
 		}
 
-		return client.StartClient(cancelCtx, proxyAddr, listenPort, targetAddr, caFile, tlsSkipVerify, noBrowser, showQR, client.PrintListenerInfo)
+		return client.StartClient(cancelCtx, proxyAddr, fmt.Sprintf("127.0.0.1:%d", listenPort), targetAddr, caFile, tlsSkipVerify, noBrowser, showQR, printListenerInfo)
 	}
 
 	return command
@@ -139,7 +139,7 @@ func sshCommand() *coral.Command {
 
 		onConnect, result := execOnConnect("ssh", buildArgs, args, cancelFunc)
 
-		if err := client.StartClient(cancelCtx, proxyAddr, 0, targetAddr, caFile, tlsSkipVerify, noBrowser, showQR, onConnect); err != nil {
+		if err := client.StartClient(cancelCtx, proxyAddr, fmt.Sprintf("127.0.0.1:%d", 0), targetAddr, caFile, tlsSkipVerify, noBrowser, showQR, onConnect); err != nil {
 			return err
 		}
 
@@ -188,4 +188,9 @@ func execOnConnect(cmd string, buildArgs func(addr string, ip string, port strin
 
 func noArgs(addr, ip, port string) []string {
 	return []string{}
+}
+
+func printListenerInfo(ctx context.Context, addr, host, port string) error {
+	fmt.Printf("\n  Listening on %s\n\n", addr)
+	return nil
 }

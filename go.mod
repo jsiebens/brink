@@ -2,8 +2,6 @@ module github.com/jsiebens/brink
 
 go 1.18
 
-replace github.com/rancher/remotedialer => github.com/jsiebens/remotedialer v0.2.6-0.20220422060621-08ae2895de0b
-
 require (
 	github.com/99designs/keyring v1.2.1
 	github.com/coreos/go-oidc/v3 v3.2.0
@@ -12,9 +10,9 @@ require (
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/gobwas/glob v0.2.3
 	github.com/google/go-github/v39 v39.2.0
-	github.com/gorilla/websocket v1.5.0
 	github.com/hashicorp/go-bexpr v0.1.11
 	github.com/hashicorp/go-multierror v1.1.1
+	github.com/hashicorp/yamux v0.1.2-0.20221031155914-a8b47c1ff9c4
 	github.com/klauspost/compress v1.15.4
 	github.com/labstack/echo-contrib v0.13.1
 	github.com/labstack/echo/v4 v4.10.0
@@ -25,7 +23,6 @@ require (
 	github.com/muesli/coral v1.0.0
 	github.com/nknorg/encrypted-stream v1.0.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/rancher/remotedialer v0.2.6-0.20220107175045-b2d660c628d5
 	github.com/sirupsen/logrus v1.8.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/stretchr/testify v1.8.1
@@ -53,14 +50,11 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/keybase/go-keychain v0.0.0-20220506172723-c18928ccd7f2 // indirect
-	github.com/kr/pretty v0.2.0 // indirect
 	github.com/labstack/gommon v0.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.12.2 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect

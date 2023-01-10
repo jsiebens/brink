@@ -16,14 +16,12 @@ import (
 	"net/url"
 )
 
-func NewDialer(proxyPublicKey key.PublicKey, clientPrivateKey key.PrivateKey, target string, tlsConfig *tls.Config) func(context.Context, string, string) (net.Conn, error) {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		u, err := url.Parse(target)
+func NewDialer(proxyPublicKey key.PublicKey, clientPrivateKey key.PrivateKey, connectUrl string, tlsConfig *tls.Config) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, id, token string) (net.Conn, error) {
+		u, err := url.Parse(connectUrl)
 		if err != nil {
 			return nil, err
 		}
-
-		u.Path = "/p/upgrade"
 
 		tr := &http.Transport{
 			ForceAttemptHTTP2: false,
@@ -45,6 +43,8 @@ func NewDialer(proxyPublicKey key.PublicKey, clientPrivateKey key.PrivateKey, ta
 				"Upgrade":               []string{api.UpgradeHeaderValue},
 				"Connection":            []string{"upgrade"},
 				api.HandshakeHeaderName: []string{clientPrivateKey.Public().String()},
+				api.IdHeader:            []string{id},
+				api.AuthHeader:          []string{token},
 			},
 		}
 		req = req.WithContext(traceCtx)

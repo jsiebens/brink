@@ -6,17 +6,20 @@ import (
 	"crypto/x509"
 	"fmt"
 	"github.com/go-resty/resty/v2"
-	"github.com/gorilla/websocket"
+	"github.com/hashicorp/yamux"
 	"github.com/jsiebens/brink/internal/api"
 	"github.com/jsiebens/brink/internal/key"
 	"github.com/jsiebens/brink/internal/util"
-	"github.com/rancher/remotedialer"
 	"github.com/sirupsen/logrus"
 	"github.com/skip2/go-qrcode"
+	"golang.org/x/sync/errgroup"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"time"
 )
+
+type OnConnect func(ctx context.Context, addr, ip, port string) error
 
 func Authenticate(ctx context.Context, proxy string, caFile string, insecureSkipVerify bool, noBrowser, showQR bool) error {
 	clt, err := createClient(proxy, caFile, insecureSkipVerify, noBrowser, showQR)
@@ -26,18 +29,15 @@ func Authenticate(ctx context.Context, proxy string, caFile string, insecureSkip
 	return clt.authenticate(ctx)
 }
 
-func StartClient(ctx context.Context, proxy string, listenPort uint64, target string, caFile string, insecureSkipVerify bool, noBrowser, showQR bool, onConnect OnConnect) error {
+func StartClient(ctx context.Context, proxy string, localAddr string, remoteAddr string, caFile string, insecureSkipVerify bool, noBrowser, showQR bool, onConnect OnConnect) error {
 	clt, err := createClient(proxy, caFile, insecureSkipVerify, noBrowser, showQR)
 	if err != nil {
 		return err
 	}
 
-	forwarder, err := NewForwarder(listenPort, target, onConnect)
-	if err != nil {
-		return err
-	}
-
-	clt.forwarder = forwarder
+	clt.localAddr = localAddr
+	clt.remoteAddr = remoteAddr
+	clt.onConnect = onConnect
 
 	return clt.start(ctx)
 }
@@ -45,7 +45,7 @@ func StartClient(ctx context.Context, proxy string, listenPort uint64, target st
 func createClient(proxy, caFile string, insecureSkipVerify bool, noBrowser, showQR bool) (*Client, error) {
 	var caCertPool *x509.CertPool
 
-	targetBaseUrl, err := util.NormalizeHttpUrl(proxy)
+	proxyBaseUrl, err := util.NormalizeHttpUrl(proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func createClient(proxy, caFile string, insecureSkipVerify bool, noBrowser, show
 		InsecureSkipVerify: insecureSkipVerify,
 	}
 
-	proxyPublicKey, err := getProxyPublicKey(context.Background(), resty.NewWithClient(&http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}), targetBaseUrl)
+	proxyPublicKey, err := getProxyPublicKey(context.Background(), resty.NewWithClient(&http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}), proxyBaseUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -77,43 +77,38 @@ func createClient(proxy, caFile string, insecureSkipVerify bool, noBrowser, show
 		return nil, err
 	}
 
-	dialer := NewDialer(*proxyPublicKey, *clientPrivateKey, targetBaseUrl, tlsConfig)
+	dialer := NewDialer(*proxyPublicKey, *clientPrivateKey, proxyBaseUrl+"/p/connect", tlsConfig)
+
 	client := &http.Client{
 		Transport: &http.Transport{
-			DialContext:     dialer,
 			TLSClientConfig: tlsConfig,
 		},
 	}
 
-	websocketDialer := &websocket.Dialer{
-		Proxy:            http.ProxyFromEnvironment,
-		HandshakeTimeout: remotedialer.HandshakeTimeOut,
-		TLSClientConfig:  tlsConfig,
-		NetDialContext:   dialer,
-	}
-
 	c := &Client{
-		httpClient: resty.NewWithClient(client),
-		target:     targetBaseUrl,
-		dialer:     websocketDialer,
-		noBrowser:  noBrowser,
-		showQR:     showQR,
+		httpClient:   resty.NewWithClient(client),
+		proxyBaseUrl: proxyBaseUrl,
+		dialer:       dialer,
+		noBrowser:    noBrowser,
+		showQR:       showQR,
 	}
 
 	return c, nil
 }
 
 type Client struct {
-	httpClient *resty.Client
-	dialer     *websocket.Dialer
-	forwarder  *Forwarder
-	target     string
-	noBrowser  bool
-	showQR     bool
+	httpClient   *resty.Client
+	dialer       func(context.Context, string, string) (net.Conn, error)
+	proxyBaseUrl string
+	localAddr    string
+	remoteAddr   string
+	noBrowser    bool
+	showQR       bool
+	onConnect    OnConnect
 }
 
 func (c *Client) authenticate(ctx context.Context) error {
-	_ = DeleteAuthToken(c.target)
+	_ = DeleteAuthToken(c.proxyBaseUrl)
 
 	sn, err := c.createSession(ctx, "")
 	if err != nil {
@@ -133,7 +128,7 @@ func (c *Client) authenticate(ctx context.Context) error {
 		authToken = sn.AuthToken
 	}
 
-	err = StoreAuthToken(c.target, authToken)
+	err = StoreAuthToken(c.proxyBaseUrl, authToken)
 	if err != nil {
 		fmt.Println()
 		fmt.Printf("  Unable to store auth token in your system credential store: %s\n", err)
@@ -146,11 +141,7 @@ func (c *Client) authenticate(ctx context.Context) error {
 }
 
 func (c *Client) start(ctx context.Context) error {
-	if err := c.forwarder.Start(); err != nil {
-		return err
-	}
-
-	currentAuthToken, storeAuthToken, _ := LoadAuthToken(c.target)
+	currentAuthToken, storeAuthToken, _ := LoadAuthToken(c.proxyBaseUrl)
 
 	sn, err := c.createSession(ctx, currentAuthToken)
 	if err != nil {
@@ -160,24 +151,96 @@ func (c *Client) start(ctx context.Context) error {
 	var sessionToken string
 	var authToken string
 
-	if sn.AuthUrl != "" {
+	if sn.AuthUrl == "" {
+		authToken = sn.AuthToken
+		sessionToken = sn.SessionToken
+	} else {
 		c.openOrShowAuthUrl(sn)
 		authToken, sessionToken, err = c.pollSessionToken(ctx, sn.SessionId)
 		if err != nil {
 			return err
 		}
-	} else {
-		authToken = sn.AuthToken
-		sessionToken = sn.SessionToken
 	}
 
-	_ = storeAuthToken(c.target, authToken)
+	_ = storeAuthToken(c.proxyBaseUrl, authToken)
 
-	if err := c.connect(ctx, sn.SessionId, sessionToken); err != nil {
+	conn, err := c.dialer(ctx, sn.SessionId, sessionToken)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	// Setup client side of yamux
+	session, err := yamux.Client(conn, nil)
+	if err != nil {
+		return err
+	}
+
+	if c.localAddr == "-" {
+		dst, err := session.Open()
+		if err != nil {
+			return fmt.Errorf("error dialing %s %s", c.remoteAddr, err.Error())
+		}
+
+		util.PipeStdInOut(dst)
+
+		return nil
+	}
+
+	listen, err := net.Listen("tcp", c.localAddr)
+	if err != nil {
+		return err
+	}
+
+	quit := make(chan interface{})
+
+	go func() {
+		select {
+		case <-session.CloseChan():
+		case <-ctx.Done():
+		}
+		close(quit)
+		_ = listen.Close()
+		_ = session.Close()
+	}()
+
+	g := new(errgroup.Group)
+
+	g.Go(func() error {
+		for {
+			src, err := listen.Accept()
+			if err != nil {
+				select {
+				case <-quit:
+					return nil
+				default:
+					return fmt.Errorf("error accepting connection %s", err.Error())
+				}
+			}
+
+			go func(src net.Conn) {
+				defer src.Close()
+				dst, err := session.Open()
+				if err != nil {
+					logrus.Errorf("error dialing %s %s", c.remoteAddr, err.Error())
+					return
+				}
+				defer dst.Close()
+				util.Pipe(src, dst)
+			}(src)
+		}
+	})
+
+	if c.onConnect != nil {
+		g.Go(func() error {
+			host, port, err := net.SplitHostPort(listen.Addr().String())
+			if err != nil {
+				return err
+			}
+			return c.onConnect(ctx, listen.Addr().String(), host, port)
+		})
+	}
+
+	return g.Wait()
 }
 
 func (c *Client) createSession(ctx context.Context, authToken string) (*api.SessionTokenResponse, error) {
@@ -186,10 +249,7 @@ func (c *Client) createSession(ctx context.Context, authToken string) (*api.Sess
 
 	var req = api.CreateSessionRequest{
 		AuthToken: authToken,
-	}
-
-	if c.forwarder != nil {
-		req.Target = c.forwarder.remoteAddr
+		Target:    c.remoteAddr,
 	}
 
 	resp, err := c.httpClient.R().
@@ -197,7 +257,7 @@ func (c *Client) createSession(ctx context.Context, authToken string) (*api.Sess
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).
-		Post("http://internal/p/session")
+		Post(c.proxyBaseUrl + "/p/session")
 
 	if err != nil {
 		return nil, err
@@ -239,7 +299,7 @@ func (c *Client) checkSessionToken(ctx context.Context, sessionId string) (*api.
 		SetResult(&result).
 		SetError(&errMsg).
 		SetContext(ctx).
-		Post("http://internal/p/token")
+		Post(c.proxyBaseUrl + "/p/token")
 
 	if err != nil {
 		return nil, err
@@ -250,57 +310,6 @@ func (c *Client) checkSessionToken(ctx context.Context, sessionId string) (*api.
 	}
 
 	return &result, nil
-}
-
-func (c *Client) connect(ctx context.Context, id, token string) error {
-	headers := http.Header{}
-	headers.Add(api.IdHeader, id)
-	headers.Add(api.AuthHeader, token)
-
-	return c.connectToProxy(ctx, "ws://internal/p/connect", headers)
-}
-
-func (c *Client) connectToProxy(rootCtx context.Context, proxyURL string, headers http.Header) error {
-	ws, resp, err := c.dialer.DialContext(rootCtx, proxyURL, headers)
-	if err != nil {
-		if resp != nil {
-			rb, err2 := ioutil.ReadAll(resp.Body)
-			if err2 != nil {
-				return &serverError{resp.StatusCode, resp.Status}
-			} else {
-				return &serverError{resp.StatusCode, string(rb)}
-			}
-		}
-		return err
-	}
-	defer ws.Close()
-
-	result := make(chan error, 2)
-
-	ctx, cancel := context.WithCancel(rootCtx)
-	defer cancel()
-
-	session := remotedialer.NewClientSession(c.declineAll, ws)
-	defer session.Close()
-
-	go func() {
-		if err := c.forwarder.OnTunnelConnect(ctx, session); err != nil {
-			result <- err
-		}
-	}()
-
-	go func() {
-		_, err = session.Serve(ctx)
-		result <- err
-	}()
-
-	select {
-	case <-ctx.Done():
-		logrus.WithField("url", proxyURL).WithField("err", ctx.Err()).Info("Proxy done")
-		return nil
-	case err := <-result:
-		return err
-	}
 }
 
 func (c *Client) openOrShowAuthUrl(sn *api.SessionTokenResponse) {
