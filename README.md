@@ -1,7 +1,7 @@
 # brink
 
 [![license](http://img.shields.io/badge/license-apache_2.0-blue.svg?style=flat)](https://raw.githubusercontent.com/jsiebens/brink/master/LICENSE)
-[![test](https://img.shields.io/github/workflow/status/jsiebens/brink/Latest%20Development%20Build/main)](https://github.com/jsiebens/brink/actions)
+[![test](https://img.shields.io/github/actions/workflow/status/jsiebens/brink/build.yaml?branch=main)](https://github.com/jsiebens/brink/actions)
 [![report](https://goreportcard.com/badge/github.com/jsiebens/brink)](https://goreportcard.com/report/github.com/jsiebens/brink)
 
 __brink__ is a lightweight Identity-Aware Proxy (IAP) for TCP forwarding. 
