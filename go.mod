@@ -1,6 +1,6 @@
 module github.com/jsiebens/brink
 
-go 1.18
+go 1.19
 
 require (
 	github.com/99designs/keyring v1.2.1
