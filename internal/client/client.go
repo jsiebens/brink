@@ -334,11 +334,6 @@ func (c *Client) openOrShowAuthUrl(sn *api.SessionTokenResponse) {
 	}
 }
 
-func (c *Client) declineAll(network, address string) bool {
-	logrus.WithField("network", network).WithField("addr", address).Info("Connection declined")
-	return false
-}
-
 type serverError struct {
 	code    int
 	message string

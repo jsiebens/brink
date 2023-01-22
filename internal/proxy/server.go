@@ -191,17 +191,17 @@ func (s *Server) checkSessionToken(c echo.Context) error {
 func (s *Server) connect(c echo.Context) error {
 	req := c.Request()
 	ctx := req.Context()
-	clientId := req.Header.Get(api.IdHeader)
-	clientAuth := req.Header.Get(api.AuthHeader)
+	sessionId := req.Header.Get(api.IdHeader)
+	sessionAuth := req.Header.Get(api.AuthHeader)
 
-	if clientId == "" || clientAuth == "" {
+	if sessionId == "" || sessionAuth == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing id and/or auth header")
 	}
 
 	var se = session{}
 
-	defer s.sessions.Delete(clientId)
-	if ok, err := s.sessions.Get(clientId, &se); err != nil || !ok {
+	defer s.sessions.Delete(sessionId)
+	if ok, err := s.sessions.Get(sessionId, &se); err != nil || !ok {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
 	}
 
@@ -209,7 +209,7 @@ func (s *Server) connect(c echo.Context) error {
 	publicKey := s.sessionRegistry.GetPublicKey()
 
 	var u = &api.SessionToken{}
-	if err := privateKey.OpenBase58(publicKey, clientAuth, u); err != nil {
+	if err := privateKey.OpenBase58(publicKey, sessionAuth, u); err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
 	}
 
@@ -228,8 +228,10 @@ func (s *Server) connect(c echo.Context) error {
 		return err
 	}
 
+	sid := util.GenerateSessionId()
+
 	logrus.
-		WithField("_cid", clientId).
+		WithField("_sid", sid).
 		WithField("id", u.UserID).
 		WithField("name", u.Username).
 		WithField("email", u.Email).
@@ -253,14 +255,14 @@ func (s *Server) connect(c echo.Context) error {
 			}
 
 			go func(src net.Conn) {
-				id := util.GenerateSessionId()
+				cid := util.GenerateSessionId()
 
 				defer src.Close()
 				dst, err := net.Dial("tcp", u.Target)
 				if err != nil {
 					logrus.
-						WithField("_cid", clientId).
-						WithField("_sid", id).
+						WithField("_sid", sid).
+						WithField("_cid", cid).
 						Errorf("error dialing %s %s", u.Target, err.Error())
 					return
 				}
@@ -268,15 +270,15 @@ func (s *Server) connect(c echo.Context) error {
 
 				start := time.Now()
 				logrus.
-					WithField("_cid", clientId).
-					WithField("_sid", id).
+					WithField("_sid", sid).
+					WithField("_cid", cid).
 					Info("connection accepted")
 
 				util.Pipe(src, dst)
 
 				logrus.
-					WithField("_cid", clientId).
-					WithField("_sid", id).
+					WithField("_sid", sid).
+					WithField("_cid", cid).
 					WithField("duration", time.Since(start)).
 					Info("connection closed")
 			}(src)
@@ -289,7 +291,7 @@ func (s *Server) connect(c echo.Context) error {
 	}
 
 	logrus.
-		WithField("_cid", clientId).
+		WithField("_sid", sid).
 		Info("client disconnected")
 
 	return nil
