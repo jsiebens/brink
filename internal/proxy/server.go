@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"fmt"
 	"github.com/hashicorp/yamux"
 	"github.com/jsiebens/brink/internal/api"
@@ -25,7 +26,7 @@ import (
 const authCachePrefix = "pa_"
 const proxyCachePrefix = "pp_"
 
-func StartServer(config *config.Config) error {
+func StartServer(ctx context.Context, config *config.Config) error {
 	v, r := version.GetReleaseInfo()
 	logrus.Infof("Starting brink proxy server. Version %s - %s", v, r)
 
@@ -70,7 +71,7 @@ func StartServer(config *config.Config) error {
 	}
 	proxyServer.RegisterRoutes(e)
 
-	return server.Start(config, e)
+	return server.Start(ctx, config, e)
 }
 
 func NewServer(config config.Proxy, cache cache.Cache, registry auth.SessionRegistry) (*Server, error) {

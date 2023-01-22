@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"github.com/jsiebens/brink/internal/auth"
 	"github.com/jsiebens/brink/internal/config"
 	"github.com/jsiebens/brink/internal/proxy"
@@ -27,7 +28,7 @@ func serverProxyCommand() *coral.Command {
 	return createServerCommand("proxy", "Start a proxy server with a configuration file.", proxy.StartServer)
 }
 
-func createServerCommand(use, short string, start func(*config.Config) error) *coral.Command {
+func createServerCommand(use, short string, start func(context.Context, *config.Config) error) *coral.Command {
 	command := &coral.Command{
 		Use:          use,
 		Short:        short,
@@ -43,7 +44,7 @@ func createServerCommand(use, short string, start func(*config.Config) error) *c
 		if err != nil {
 			return err
 		}
-		return start(c)
+		return start(command.Context(), c)
 	}
 
 	return command

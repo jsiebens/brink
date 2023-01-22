@@ -15,31 +15,26 @@ import (
 	"time"
 )
 
-func Start(config *config.Config, e *echo.Echo) error {
+func Start(ctx context.Context, config *config.Config, e *echo.Echo) error {
 	m := mon.Echo()
 
 	registerDefaultRoutes(e)
 	e.Use(mon.Middleware())
 
-	done := make(chan os.Signal, 1)
-	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-done
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = e.Shutdown(ctx)
-		_ = m.Shutdown(ctx)
-	}()
-
-	logrus.Infof("server listening on %s", config.ListenAddr)
-	logrus.Infof("metrics listening on %s", config.Metrics.ListenAddr)
-
-	return serve(e, m, config)
+	return serve(contextWithSigterm(ctx), e, m, config)
 }
 
-func serve(e *echo.Echo, p *echo.Echo, config *config.Config) error {
-	g := new(errgroup.Group)
+func serve(ctx context.Context, e *echo.Echo, p *echo.Echo, config *config.Config) error {
+	g, gCtx := errgroup.WithContext(ctx)
+
+	go func() {
+		<-gCtx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = e.Shutdown(shutdownCtx)
+		_ = p.Shutdown(shutdownCtx)
+	}()
+
 	g.Go(func() error {
 		if config.Tls.Disable {
 			if err := e.Start(config.ListenAddr); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -52,12 +47,17 @@ func serve(e *echo.Echo, p *echo.Echo, config *config.Config) error {
 		}
 		return nil
 	})
+
 	g.Go(func() error {
 		if err := p.Start(config.Metrics.ListenAddr); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 		return nil
 	})
+
+	logrus.Infof("server listening on %s", config.ListenAddr)
+	logrus.Infof("metrics listening on %s", config.Metrics.ListenAddr)
+
 	return g.Wait()
 }
 
@@ -65,4 +65,21 @@ func registerDefaultRoutes(e *echo.Echo) {
 	e.Any("/*", func(c echo.Context) error {
 		return c.Render(http.StatusOK, "index.html", nil)
 	})
+}
+
+func contextWithSigterm(ctx context.Context) context.Context {
+	ctxWithCancel, cancel := context.WithCancel(ctx)
+	go func() {
+		defer cancel()
+
+		signalCh := make(chan os.Signal, 1)
+		signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
+
+		select {
+		case <-signalCh:
+		case <-ctx.Done():
+		}
+	}()
+
+	return ctxWithCancel
 }

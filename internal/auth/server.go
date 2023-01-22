@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/hashicorp/go-bexpr"
@@ -22,7 +23,7 @@ import (
 
 const authCachePrefix = "a_"
 
-func StartServer(config *config.Config) error {
+func StartServer(ctx context.Context, config *config.Config) error {
 	v, r := version.GetReleaseInfo()
 	logrus.Infof("Starting brink auth server. Version %s - %s", v, r)
 
@@ -44,7 +45,7 @@ func StartServer(config *config.Config) error {
 	}
 	authServer.RegisterRoutes(e, true)
 
-	return server.Start(config, e)
+	return server.Start(ctx, config, e)
 }
 
 func NewServer(config config.Auth, cache cache.Cache) (*Server, error) {
