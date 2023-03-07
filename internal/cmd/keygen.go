@@ -3,17 +3,17 @@ package cmd
 import (
 	"fmt"
 	"github.com/jsiebens/brink/internal/key"
-	"github.com/muesli/coral"
+	"github.com/spf13/cobra"
 )
 
-func keygenCommand() *coral.Command {
-	command := &coral.Command{
+func keygenCommand() *cobra.Command {
+	command := &cobra.Command{
 		Use:          "keygen",
 		Short:        "",
 		SilenceUsage: true,
 	}
 
-	command.RunE = func(cmd *coral.Command, args []string) error {
+	command.RunE = func(cmd *cobra.Command, args []string) error {
 		privateKey, err := key.GeneratePrivateKey()
 		if err != nil {
 			return err

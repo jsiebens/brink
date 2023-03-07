@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"github.com/jsiebens/brink/internal/client"
 	"github.com/jsiebens/brink/internal/util"
-	"github.com/muesli/coral"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	"io/ioutil"
 )
 
-func authCommand() *coral.Command {
-	command := &coral.Command{
+func authCommand() *cobra.Command {
+	command := &cobra.Command{
 		Use:   "auth",
 		Short: "Manage credentials for the Brink Client.",
 	}
@@ -21,8 +21,8 @@ func authCommand() *coral.Command {
 	return command
 }
 
-func loginCommand() *coral.Command {
-	command := &coral.Command{
+func loginCommand() *cobra.Command {
+	command := &cobra.Command{
 		Use:          "login",
 		Short:        "Authenticate the Brink Client for a specific Proxy.",
 		SilenceUsage: true,
@@ -30,7 +30,7 @@ func loginCommand() *coral.Command {
 
 	registerProxyFlags(command)
 
-	command.RunE = func(cmd *coral.Command, args []string) error {
+	command.RunE = func(cmd *cobra.Command, args []string) error {
 		logrus.SetOutput(ioutil.Discard)
 
 		proxyAddr := getString(BrinkProxyAddr, proxyAddrFlag)
@@ -44,8 +44,8 @@ func loginCommand() *coral.Command {
 	return command
 }
 
-func revokeCommand() *coral.Command {
-	command := &coral.Command{
+func revokeCommand() *cobra.Command {
+	command := &cobra.Command{
 		Use:          "revoke",
 		Short:        "Delete the current token from the local store.",
 		SilenceUsage: true,
@@ -53,7 +53,7 @@ func revokeCommand() *coral.Command {
 
 	registerProxyFlags(command)
 
-	command.RunE = func(cmd *coral.Command, args []string) error {
+	command.RunE = func(cmd *cobra.Command, args []string) error {
 		proxyAddr := getString(BrinkProxyAddr, proxyAddrFlag)
 		if proxyAddr == "" {
 			return fmt.Errorf("required flag --proxy-addr is missing")
