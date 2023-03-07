@@ -73,11 +73,3 @@ $ brink ssh -r http://localhost:7000 -t localhost:22
 - [Running brink with docker-compose](./examples/docker)
 - [Running brink on Kubernetes]((./examples/kubernetes))
 
-## Live demo
-
-Download the latest version of brink from the [releases](https://github.com/jsiebens/brink/releases) page, connect to
-the demo environment and enjoy a dancing parrot over SSH.
-
-```shell
-$ brink ssh -r brink.j5s.io -t parttysh:2222
-```
