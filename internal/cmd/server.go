@@ -5,6 +5,7 @@ import (
 	"github.com/jsiebens/brink/internal/auth"
 	"github.com/jsiebens/brink/internal/config"
 	"github.com/jsiebens/brink/internal/proxy"
+	"github.com/jsiebens/brink/internal/relay"
 	"github.com/spf13/cobra"
 )
 
@@ -16,6 +17,7 @@ func serverCommand() *cobra.Command {
 
 	command.AddCommand(serverAuthCommand())
 	command.AddCommand(serverProxyCommand())
+	command.AddCommand(serverRelayCommand())
 
 	return command
 }
@@ -26,6 +28,10 @@ func serverAuthCommand() *cobra.Command {
 
 func serverProxyCommand() *cobra.Command {
 	return createServerCommand("proxy", "Start a proxy server with a configuration file.", proxy.StartServer)
+}
+
+func serverRelayCommand() *cobra.Command {
+	return createServerCommand("relay", "Start a relay server with a configuration file.", relay.StartServer)
 }
 
 func createServerCommand(use, short string, start func(context.Context, *config.Config) error) *cobra.Command {

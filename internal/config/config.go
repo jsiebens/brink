@@ -87,6 +87,7 @@ type Config struct {
 	Cache      Cache   `yaml:"cache"`
 	Auth       Auth    `yaml:"auth"`
 	Proxy      Proxy   `yaml:"proxy"`
+	Relay      Relay   `yaml:"relay"`
 }
 
 type Cache struct {
@@ -125,6 +126,12 @@ type Provider struct {
 type Proxy struct {
 	PrivateKey string            `yaml:"private_key"`
 	Policies   map[string]Policy `yaml:"policies"`
+}
+
+type Relay struct {
+	PrivateKey      string `yaml:"private_key"`
+	RemoteServer    string `yaml:"remote_server"`
+	RemotePublicKey string `yaml:"remote_public_key"`
 }
 
 type Policy struct {
